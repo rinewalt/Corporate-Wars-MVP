@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { getSocket } from "../network/socket";
+import { clearSession } from "../network/reconnect";
 import { clientState } from "../state/ClientGameState";
 import type { RoomSnapshot } from "../types/shared";
 
@@ -22,6 +23,7 @@ export class LobbyScene extends Phaser.Scene {
       socket.removeAllListeners("gameStarted");
       socket.removeAllListeners("hostChanged");
       socket.removeAllListeners("errorMessage");
+      socket.removeAllListeners("leftRoom");
     });
     this.add.rectangle(900, 700, 1800, 1400, 0x050e02);
     this.add.text(100, 95, "LOBBY", { fontFamily: "monospace", fontSize: "70px", color: "#f0c84d", fontStyle: "bold" });
@@ -29,6 +31,7 @@ export class LobbyScene extends Phaser.Scene {
     this.status = this.add.text(130, 1230, "", { fontFamily: "monospace", fontSize: "26px", color: "#ffdf75" });
     const ready = this.add.text(1180, 300, "Ready / Unready", buttonStyle()).setInteractive({ useHandCursor: true });
     this.startButton = this.add.text(1180, 415, "Start Game", buttonStyle()).setInteractive({ useHandCursor: true });
+    const exit = this.add.text(1180, 530, "Exit", buttonStyle()).setInteractive({ useHandCursor: true });
     this.add.text(900, 1325, "© 2026 RineDC. All rights reserved.", {
       fontFamily: "monospace",
       fontSize: "18px",
@@ -39,8 +42,18 @@ export class LobbyScene extends Phaser.Scene {
       getSocket().emit("setReady", { ready: !me?.ready });
     });
     this.startButton.on("pointerdown", () => getSocket().emit("startGame"));
+    exit.on("pointerdown", () => this.exitLobby());
     this.registerSocketHandlers();
     this.render();
+  }
+
+  private exitLobby(): void {
+    getSocket().emit("leaveRoom");
+    clearSession();
+    clientState.room = undefined;
+    clientState.playerId = undefined;
+    clientState.reconnectToken = undefined;
+    this.scene.start("SetupScene");
   }
 
   private registerSocketHandlers(): void {

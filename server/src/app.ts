@@ -10,7 +10,7 @@ export function createApp() {
   const clientOrigin = process.env.CLIENT_ORIGIN ?? "*";
   app.use(cors({ origin: clientOrigin }));
   app.get("/health", (_request: Request, response: Response) => {
-    response.json({ ok: true, service: "corporate-wars-server" });
+    response.json({ status: "ok" });
   });
 
   const httpServer = createServer(app);

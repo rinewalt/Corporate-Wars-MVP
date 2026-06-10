@@ -37,11 +37,17 @@ export class RoomManager {
     return [...this.roomsById.values()];
   }
 
+  removeRoom(room: RoomState): void {
+    this.roomsById.delete(room.id);
+    this.roomsByCode.delete(room.code);
+  }
+
   cleanup(now = Date.now()): number {
     let removed = 0;
     for (const room of this.roomsById.values()) {
       const allDisconnected = [...room.players.values()].every((player) => !player.connected);
       const shouldRemove =
+        room.players.size === 0 ||
         (room.phase === "lobby" && now - room.createdAt > GAME.lobbyTtlMs) ||
         (room.phase === "ended" && now - room.endedAt > GAME.endedRoomTtlMs) ||
         (allDisconnected && now - Math.max(room.createdAt, room.gameStartedAt || 0, room.endedAt || 0) > GAME.disconnectedRoomTtlMs);

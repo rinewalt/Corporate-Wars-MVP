@@ -19,9 +19,12 @@ export function getSocket(): Socket {
       console.error("[socket] setup error", { message: SOCKET_SETUP_ERROR });
     }
     socket = io(SERVER_URL || "https://missing-vite-server-url.invalid", {
-      autoConnect: Boolean(SERVER_URL),
-      reconnectionAttempts: 8,
-      timeout: 6_000,
+      autoConnect: false,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1_000,
+      reconnectionDelayMax: 5_000,
+      timeout: 30_000,
       transports: ["websocket", "polling"]
     });
     socket.on("connect", () => {
@@ -42,4 +45,34 @@ export function getSocket(): Socket {
     });
   }
   return socket;
+}
+
+export function connectSocket(): Socket {
+  const activeSocket = getSocket();
+  if (SERVER_URL && !activeSocket.connected && !activeSocket.active) activeSocket.connect();
+  return activeSocket;
+}
+
+export function resetSocket(): Socket {
+  if (socket) {
+    socket.removeAllListeners();
+    socket.disconnect();
+    socket = undefined;
+  }
+  return getSocket();
+}
+
+export async function wakeServer(timeoutMs = 12_000): Promise<void> {
+  if (!SERVER_URL) throw new Error(SOCKET_SETUP_ERROR);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${SERVER_URL}/health`, {
+      cache: "no-store",
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Health check failed: ${response.status}`);
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }

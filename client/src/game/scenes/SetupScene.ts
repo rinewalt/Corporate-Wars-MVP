@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { getSocket, SERVER_URL, SOCKET_SETUP_ERROR } from "../network/socket";
+import { connectSocket, getSocket, resetSocket, SERVER_URL, SOCKET_SETUP_ERROR, wakeServer } from "../network/socket";
 import { clearSession, loadSession, saveSession } from "../network/reconnect";
 import { clientState } from "../state/ClientGameState";
 import type { Gender, RoomSnapshot } from "../types/shared";
@@ -9,6 +9,12 @@ interface RoomEntryPayload {
   playerId: string;
   reconnectToken: string;
   roomState: RoomSnapshot;
+}
+
+interface JoinPayload {
+  name: string;
+  gender: Gender;
+  roomCode: string;
 }
 
 export class SetupScene extends Phaser.Scene {
@@ -21,6 +27,7 @@ export class SetupScene extends Phaser.Scene {
   private errorText?: Phaser.GameObjects.Text;
   private debugText?: Phaser.GameObjects.Text;
   private joinButton?: Phaser.GameObjects.Text;
+  private retryButton?: Phaser.GameObjects.Text;
   private lastAction = "Idle";
   private lastError = "";
   private lastSocketError = "";
@@ -28,17 +35,21 @@ export class SetupScene extends Phaser.Scene {
   private joinPending = false;
   private joinEventEmitted = false;
   private serverResponseReceived = false;
+  private pendingJoinPayload: JoinPayload | undefined = undefined;
   private joinTimeout: number | undefined = undefined;
+  private connectWaitTimeout: number | undefined = undefined;
   private resizeHandler = () => this.positionInputs();
   private readonly handleSetupSocketConnect = () => {
     this.lastSocketError = "";
     this.refreshConnectionStatus();
+    this.setSetupStatus("Connected");
+    this.emitPendingJoinIfReady();
     this.updateDebugOverlay();
   };
   private readonly handleSetupSocketConnectError = (error: Error) => {
     this.lastSocketError = error.message;
     this.refreshConnectionStatus("Failed");
-    this.showSetupError(error.message);
+    this.showSetupError("Connection timeout. Tap Retry.");
   };
   private readonly handleSetupSocketDisconnect = (reason: string) => {
     this.lastSocketError = reason;
@@ -67,6 +78,7 @@ export class SetupScene extends Phaser.Scene {
     this.registerSocketHandlers();
     this.refreshConnectionStatus();
     this.updateDebugOverlay();
+    this.startConnectionFlow();
     const stored = loadSession();
     if (stored) {
       this.setSetupStatus("Reconnecting...");
@@ -78,6 +90,7 @@ export class SetupScene extends Phaser.Scene {
     this.nameInput?.remove();
     this.codeInput?.remove();
     this.clearJoinTimeout();
+    this.clearConnectWaitTimeout();
     this.removeSetupSocketStatusHandlers(getSocket());
     window.removeEventListener("resize", this.resizeHandler);
   }
@@ -100,7 +113,7 @@ export class SetupScene extends Phaser.Scene {
     this.add.text(650, 505, "Player name", labelStyle());
     this.add.text(650, 600, "Room code optional", labelStyle());
     this.add.text(650, 695, "Gender:", labelStyle());
-    this.status = this.add.text(900, 945, "", {
+    this.status = this.add.text(900, 965, "", {
       fontFamily: "monospace",
       fontSize: "22px",
       color: "#ffdf75",
@@ -115,7 +128,7 @@ export class SetupScene extends Phaser.Scene {
       color: "#aac1ca",
       lineSpacing: 4
     }).setOrigin(0, 0);
-    this.add.text(900, 995, "© 2026 RineDC. All rights reserved.", {
+    this.add.text(900, 1010, "© 2026 RineDC. All rights reserved.", {
       fontFamily: "monospace",
       fontSize: "16px",
       color: "#aac1ca"
@@ -140,8 +153,10 @@ export class SetupScene extends Phaser.Scene {
     this.joinButton = join;
     this.makeTouchButton(create, () => this.createRoom(), "create");
     this.makeTouchButton(join, () => this.joinRoom(), "join");
-    const reconnect = this.add.text(800, 890, "Reconnect", buttonStyle(false, "secondary")).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    const clear = this.add.text(1000, 890, "Clear Saved", buttonStyle(false, "secondary")).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const reconnect = this.add.text(790, 880, "Reconnect", buttonStyle(false, "secondary")).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    this.retryButton = this.add.text(900, 925, "Retry Connection", buttonStyle(false, "secondary")).setOrigin(0.5);
+    this.makeTouchButton(this.retryButton, () => this.retryConnection(), "retry");
+    const clear = this.add.text(1010, 880, "Clear Saved", buttonStyle(false, "secondary")).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
     reconnect.on("pointerdown", () => {
       const stored = loadSession();
@@ -259,18 +274,33 @@ export class SetupScene extends Phaser.Scene {
       return this.showSetupError("Enter a room code.");
     }
     const socket = getSocket();
-    if (!this.ensureSocketConnected(socket)) return;
     this.joinPending = true;
     this.joinEventEmitted = false;
     this.serverResponseReceived = false;
+    this.pendingJoinPayload = { name: playerName, gender: this.gender, roomCode };
     this.setJoinButtonEnabled(false);
+    if (!socket.connected) {
+      console.warn("[setup] join queued while socket is connecting", { socketId: socket.id, serverUrl: SERVER_URL, roomCode });
+      this.setSetupStatus("Connecting to server. Please wait...");
+      this.startConnectWaitTimeout();
+      this.startConnectionFlow();
+      this.updateDebugOverlay();
+      return;
+    }
+    this.emitPendingJoinIfReady();
+  }
+
+  private emitPendingJoinIfReady(): void {
+    const socket = getSocket();
+    if (!this.joinPending || this.joinEventEmitted || !this.pendingJoinPayload || !socket.connected) return;
+    this.clearConnectWaitTimeout();
     this.setSetupStatus("Joining room...");
-    const payload = { name: playerName, gender: this.gender, roomCode };
+    const payload = this.pendingJoinPayload;
     this.joinEventEmitted = true;
     this.setLastAction("Join emitted");
     this.updateDebugOverlay();
-    console.info("[setup] join game normalized room code", { roomCode });
-    console.info("[setup] join game event emitted", { hasName: true, nameLength: playerName.length, gender: this.gender, roomCode });
+    console.info("[setup] join game normalized room code", { roomCode: payload.roomCode });
+    console.info("[setup] join game event emitted", { hasName: true, nameLength: payload.name.length, gender: payload.gender, roomCode: payload.roomCode });
     socket.emit("joinRoom", payload);
     this.startJoinTimeout();
   }
@@ -284,7 +314,9 @@ export class SetupScene extends Phaser.Scene {
     const enterLobby = (eventName: string, payload: RoomEntryPayload) => {
       this.serverResponseReceived = true;
       this.clearJoinTimeout();
+      this.clearConnectWaitTimeout();
       this.joinPending = false;
+      this.pendingJoinPayload = undefined;
       this.setJoinButtonEnabled(true);
       this.setLastAction("Server response received");
       const roomId = payload.roomId ?? payload.roomState.roomId;
@@ -313,7 +345,9 @@ export class SetupScene extends Phaser.Scene {
       console.warn("[setup] server error response received", payload);
       this.serverResponseReceived = true;
       this.clearJoinTimeout();
+      this.clearConnectWaitTimeout();
       this.joinPending = false;
+      this.pendingJoinPayload = undefined;
       this.setJoinButtonEnabled(true);
       this.setLastAction("Server response received");
       this.lastServerError = payload.message ?? "Connection error.";
@@ -343,6 +377,58 @@ export class SetupScene extends Phaser.Scene {
     socket.off("disconnect", this.handleSetupSocketDisconnect);
   }
 
+  private async startConnectionFlow(isRetry = false): Promise<void> {
+    if (SOCKET_SETUP_ERROR) {
+      this.refreshConnectionStatus("Failed");
+      this.showSetupError(SOCKET_SETUP_ERROR);
+      return;
+    }
+    const socket = getSocket();
+    if (socket.connected) {
+      this.refreshConnectionStatus();
+      this.emitPendingJoinIfReady();
+      return;
+    }
+    this.refreshConnectionStatus();
+    this.setSetupStatus(isRetry ? "Retrying connection..." : "Waking server...");
+    try {
+      await wakeServer();
+      this.lastSocketError = "";
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Health check failed";
+      this.lastSocketError = message;
+      console.warn("[setup] health check failed before socket connect", { message });
+      this.showSetupError("Server wake-up failed. Trying socket connection...");
+    }
+    this.setSetupStatus("Connecting to server...");
+    connectSocket();
+    this.refreshConnectionStatus();
+    this.updateDebugOverlay();
+  }
+
+  private retryConnection(): void {
+    console.info("[setup] retry connection clicked");
+    this.clearConnectWaitTimeout();
+    this.clearJoinTimeout();
+    this.lastSocketError = "";
+    this.lastServerError = "";
+    this.lastError = "";
+    this.serverResponseReceived = false;
+    this.joinEventEmitted = false;
+    this.joinPending = false;
+    this.pendingJoinPayload = undefined;
+    this.setJoinButtonEnabled(true);
+    this.setLastAction("Retry connection clicked");
+    const socket = resetSocket();
+    this.removeSetupSocketStatusHandlers(socket);
+    for (const event of ["roomCreated", "roomJoined", "reconnected", "errorMessage"]) {
+      socket.removeAllListeners(event);
+    }
+    this.registerSocketHandlers();
+    this.setSetupStatus("Waking server...");
+    this.startConnectionFlow(true);
+  }
+
   private startJoinTimeout(): void {
     this.clearJoinTimeout();
     this.joinTimeout = window.setTimeout(() => {
@@ -355,16 +441,42 @@ export class SetupScene extends Phaser.Scene {
         lastServerError: this.lastServerError
       });
       this.joinPending = false;
+      this.pendingJoinPayload = undefined;
       this.setJoinButtonEnabled(true);
       this.showSetupError("Server did not respond. Check your connection and try again.");
       this.updateDebugOverlay();
     }, 5_000);
   }
 
+  private startConnectWaitTimeout(): void {
+    this.clearConnectWaitTimeout();
+    this.connectWaitTimeout = window.setTimeout(() => {
+      if (!this.joinPending || this.joinEventEmitted || getSocket().connected) return;
+      console.warn("[setup] connection wait timeout before join emit", {
+        socketConnected: getSocket().connected,
+        joinEventEmitted: this.joinEventEmitted,
+        serverResponseReceived: this.serverResponseReceived,
+        lastSocketError: this.lastSocketError
+      });
+      this.joinPending = false;
+      this.pendingJoinPayload = undefined;
+      this.setJoinButtonEnabled(true);
+      this.refreshConnectionStatus("Failed");
+      this.showSetupError("Unable to connect to server. Tap Retry.");
+      this.updateDebugOverlay();
+    }, 10_000);
+  }
+
   private clearJoinTimeout(): void {
     if (this.joinTimeout === undefined) return;
     window.clearTimeout(this.joinTimeout);
     this.joinTimeout = undefined;
+  }
+
+  private clearConnectWaitTimeout(): void {
+    if (this.connectWaitTimeout === undefined) return;
+    window.clearTimeout(this.connectWaitTimeout);
+    this.connectWaitTimeout = undefined;
   }
 
   private setJoinButtonEnabled(enabled: boolean): void {

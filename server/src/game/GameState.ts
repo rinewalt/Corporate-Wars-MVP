@@ -79,7 +79,7 @@ export class RoomState {
       ready: false,
       connected: true,
       eliminated: false,
-      officeSlot: this.players.size,
+      officeSlot: this.nextOfficeSlot(),
       officeHp: GAME.startingHp,
       workers: GAME.startingWorkers,
       workerAttack: GAME.startingWorkerAttack,
@@ -114,6 +114,15 @@ export class RoomState {
     player.connected = false;
     player.socketId = undefined;
     if (player.id === this.hostPlayerId) this.transferHost();
+    return player;
+  }
+
+  removeLobbyPlayer(playerId: string): PlayerState | undefined {
+    if (this.phase !== "lobby") return undefined;
+    const player = this.players.get(playerId);
+    if (!player) return undefined;
+    this.players.delete(playerId);
+    if (playerId === this.hostPlayerId) this.transferHost();
     return player;
   }
 
@@ -368,6 +377,14 @@ export class RoomState {
     const player = this.players.get(playerId);
     if (!player) throw new Error("Player not found.");
     return player;
+  }
+
+  private nextOfficeSlot(): number {
+    const used = new Set([...this.players.values()].map((player) => player.officeSlot));
+    for (let slot = 0; slot < GAME.maxPlayers; slot += 1) {
+      if (!used.has(slot)) return slot;
+    }
+    return this.players.size;
   }
 }
 

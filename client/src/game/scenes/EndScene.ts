@@ -17,6 +17,25 @@ export class EndScene extends Phaser.Scene {
       color: "#f0c84d",
       fontStyle: "bold"
     });
+    const exit = this.add.text(1260, 1160, "Exit", {
+      ...textStyle(28),
+      color: "#071924",
+      backgroundColor: "#f0c84d",
+      padding: { x: 18, y: 12 }
+    }).setInteractive({ useHandCursor: true });
+    this.add.text(900, 1325, "© 2026 RineDC. All rights reserved.", {
+      fontFamily: "monospace",
+      fontSize: "18px",
+      color: "#aac1ca"
+    }).setOrigin(0.5);
+    exit.on("pointerdown", () => {
+      clearSession();
+      clientState.room = undefined;
+      clientState.endStats = undefined;
+      clientState.playerId = undefined;
+      clientState.reconnectToken = undefined;
+      this.scene.start("SetupScene");
+    });
     if (!stats && room) {
       this.add.text(120, 240, "The match has ended.", textStyle(30));
       return;
@@ -32,24 +51,6 @@ export class EndScene extends Phaser.Scene {
       ...stats.survivalRanking.map((player, index) => `${index + 1}. ${player.name}`)
     ];
     this.add.text(120, 240, lines, textStyle(30));
-    const back = this.add.text(1260, 730, "New Game", {
-      ...textStyle(28),
-      color: "#071924",
-      backgroundColor: "#f0c84d",
-      padding: { x: 18, y: 12 }
-    }).setInteractive({ useHandCursor: true });
-    back.setY(1160);
-    this.add.text(900, 1325, "© 2026 RineDC. All rights reserved.", {
-      fontFamily: "monospace",
-      fontSize: "18px",
-      color: "#aac1ca"
-    }).setOrigin(0.5);
-    back.on("pointerdown", () => {
-      clearSession();
-      clientState.room = undefined;
-      clientState.endStats = undefined;
-      this.scene.start("SetupScene");
-    });
   }
 }
 

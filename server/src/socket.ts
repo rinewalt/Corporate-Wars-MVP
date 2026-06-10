@@ -208,6 +208,49 @@ export function attachSocketHandlers(io: Server, rooms: RoomManager): void {
       io.to(room.id).emit("gameStateSnapshot", room.snapshot());
     }));
 
+    socket.on("leaveRoom", () => safe(socket, "leaveRoom", () => {
+      const data = socket.data as SocketData;
+      if (!data.roomId || !data.playerId) {
+        socket.emit("leftRoom");
+        return;
+      }
+      const room = rooms.getById(data.roomId);
+      if (!room) {
+        delete data.roomId;
+        delete data.playerId;
+        socket.emit("leftRoom");
+        return;
+      }
+      const leavingPlayerId = data.playerId;
+      logInfo("leave room event", { socketId: socket.id, roomId: room.id, playerId: leavingPlayerId, phase: room.phase });
+      if (room.phase === "lobby") {
+        const removed = room.removeLobbyPlayer(leavingPlayerId);
+        socket.leave(room.id);
+        delete data.roomId;
+        delete data.playerId;
+        socket.emit("leftRoom");
+        if (room.players.size === 0) {
+          rooms.removeRoom(room);
+          logInfo("empty room removed after leave", { roomId: room.id, roomCode: room.code });
+          return;
+        }
+        if (removed) {
+          io.to(room.id).emit("hostChanged", { hostPlayerId: room.hostPlayerId });
+          io.to(room.id).emit("roomState", room.snapshot());
+        }
+        return;
+      }
+      const player = room.disconnect(socket.id);
+      socket.leave(room.id);
+      delete data.roomId;
+      delete data.playerId;
+      socket.emit("leftRoom");
+      if (!player) return;
+      io.to(room.id).emit("playerDisconnected", { playerId: player.id });
+      io.to(room.id).emit("hostChanged", { hostPlayerId: room.hostPlayerId });
+      io.to(room.id).emit("roomState", room.snapshot());
+    }));
+
     socket.on("disconnect", () => {
       const room = rooms.findBySocket(socket.id);
       rateLimit.clearSocket(socket.id);

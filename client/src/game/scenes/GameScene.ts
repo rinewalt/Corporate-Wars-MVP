@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { getSocket } from "../network/socket";
+import { clearSession } from "../network/reconnect";
 import { OFFICE_PATHS } from "../../config/mapPaths";
 import { drawCorporateCity, OFFICE_SLOTS } from "../render/MapRenderer";
 import { clientState } from "../state/ClientGameState";
@@ -22,6 +23,7 @@ export class GameScene extends Phaser.Scene {
   private activeWorkers = new Set<string>();
   private announcementLayer: Phaser.GameObjects.Container | undefined;
   private currentAnnouncement: Phaser.GameObjects.Container | undefined;
+  private exitDialog: Phaser.GameObjects.Container | undefined;
   private active = false;
 
   constructor() {
@@ -33,20 +35,29 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.active = false;
       const socket = getSocket();
-      for (const event of ["gameStateSnapshot", "attackAccepted", "workerArrived", "monsterWarning", "monsterAttack", "monsterImpact", "gameEnded", "errorMessage"]) {
+      for (const event of ["gameStateSnapshot", "attackAccepted", "workerArrived", "monsterWarning", "monsterAttack", "monsterImpact", "gameEnded", "errorMessage", "leftRoom"]) {
         socket.removeAllListeners(event);
       }
     });
     drawCorporateCity(this);
     this.cameras.main.setBounds(0, 0, 1800, 1400);
     this.announcementLayer = this.add.container(0, 0).setDepth(99999).setScrollFactor(0);
+    this.add.text(1640, 42, "Exit", {
+      fontFamily: "monospace",
+      fontSize: "24px",
+      color: "#071924",
+      backgroundColor: "#f0c84d",
+      padding: { x: 16, y: 9 },
+      fontStyle: "bold"
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(99998).setInteractive({ useHandCursor: true })
+      .on("pointerdown", () => this.showExitConfirmation());
     this.registerSocketHandlers();
     this.renderSnapshot(clientState.room);
   }
 
   private registerSocketHandlers(): void {
     const socket = getSocket();
-    for (const event of ["gameStateSnapshot", "attackAccepted", "workerArrived", "monsterWarning", "monsterAttack", "monsterImpact", "gameEnded", "errorMessage"]) {
+    for (const event of ["gameStateSnapshot", "attackAccepted", "workerArrived", "monsterWarning", "monsterAttack", "monsterImpact", "gameEnded", "errorMessage", "leftRoom"]) {
       socket.removeAllListeners(event);
     }
     socket.on("gameStateSnapshot", (snapshot: RoomSnapshot) => this.renderSnapshot(snapshot));
@@ -61,6 +72,44 @@ export class GameScene extends Phaser.Scene {
       this.scene.start("EndScene");
     });
     socket.on("errorMessage", (payload) => this.showAnnouncement(payload.message ?? "Action failed.", 3000, "danger"));
+    socket.on("leftRoom", () => this.returnToSetup());
+  }
+
+  private showExitConfirmation(): void {
+    if (this.exitDialog) {
+      this.exitDialog.destroy();
+      this.exitDialog = undefined;
+    }
+    const overlay = this.add.rectangle(900, 700, 1800, 1400, 0x000000, 0.52);
+    const panel = this.add.rectangle(900, 700, 690, 260, 0x102634, 0.98).setStrokeStyle(4, 0xd7e8ef);
+    const message = this.add.text(900, 640, "Are you sure you want to exit the match?", {
+      fontFamily: "monospace",
+      fontSize: "26px",
+      color: "#ffffff",
+      align: "center",
+      fontStyle: "bold",
+      wordWrap: { width: 600 }
+    }).setOrigin(0.5);
+    const cancel = this.add.text(760, 750, "Cancel", dialogButtonStyle(false)).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const exit = this.add.text(1040, 750, "Exit Match", dialogButtonStyle(true)).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    this.exitDialog = this.add.container(0, 0, [overlay, panel, message, cancel, exit]).setDepth(100000).setScrollFactor(0);
+    cancel.on("pointerdown", () => {
+      this.exitDialog?.destroy();
+      this.exitDialog = undefined;
+    });
+    exit.on("pointerdown", () => {
+      getSocket().emit("leaveRoom");
+      this.returnToSetup();
+    });
+  }
+
+  private returnToSetup(): void {
+    clearSession();
+    clientState.room = undefined;
+    clientState.endStats = undefined;
+    clientState.playerId = undefined;
+    clientState.reconnectToken = undefined;
+    this.scene.start("SetupScene");
   }
 
   private renderSnapshot(snapshot?: RoomSnapshot): void {
@@ -305,4 +354,15 @@ function announcementColor(type: AnnouncementType): string {
   if (type === "danger") return "#ff4d4d";
   if (type === "success") return "#5dff8a";
   return "#d8f4ff";
+}
+
+function dialogButtonStyle(primary: boolean): Phaser.Types.GameObjects.Text.TextStyle {
+  return {
+    fontFamily: "monospace",
+    fontSize: "24px",
+    color: primary ? "#071924" : "#ffffff",
+    backgroundColor: primary ? "#f0c84d" : "#183544",
+    padding: { x: 18, y: 10 },
+    fontStyle: "bold"
+  };
 }
