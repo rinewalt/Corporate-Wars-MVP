@@ -22,6 +22,10 @@ export class RoomManager {
     return this.roomsByCode.get(code.trim().toUpperCase());
   }
 
+  roomCodes(): string[] {
+    return [...this.roomsByCode.keys()];
+  }
+
   findBySocket(socketId: string): RoomState | undefined {
     for (const room of this.roomsById.values()) {
       if ([...room.players.values()].some((player) => player.socketId === socketId)) return room;

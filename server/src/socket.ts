@@ -34,6 +34,10 @@ function payloadRecord(payload: unknown): Record<string, unknown> {
   return payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
 }
 
+function normalizeRoomCodeForLog(value: unknown): string | undefined {
+  return typeof value === "string" ? value.trim().toUpperCase() : undefined;
+}
+
 export function attachSocketHandlers(io: Server, rooms: RoomManager): void {
   const rateLimit = new SocketRateLimit();
   const loops = new Map<string, NodeJS.Timeout>();
@@ -109,24 +113,45 @@ export function attachSocketHandlers(io: Server, rooms: RoomManager): void {
       const room = rooms.createRoom();
       const player = room.addPlayer(name, gender, socket.id);
       joinSocketRoom(socket, room, player.id);
-      logInfo("room created", { socketId: socket.id, roomId: room.id, roomCode: room.code, playerId: player.id });
+      logInfo("room created", { socketId: socket.id, roomId: room.id, roomCode: room.code, playerId: player.id, existingRoomCodes: rooms.roomCodes() });
       socket.emit("roomCreated", { roomId: room.id, roomCode: room.code, playerId: player.id, reconnectToken: player.reconnectToken, roomState: room.snapshot() });
       io.to(room.id).emit("roomState", room.snapshot());
     }));
 
     socket.on("joinRoom", (payload: unknown) => safe(socket, "joinRoom", () => {
       const request = payloadRecord(payload);
-      logInfo("join room event", { socketId: socket.id, ...payloadSummary(payload) });
+      const receivedRoomCode = typeof request.roomCode === "string" ? request.roomCode : undefined;
+      const normalizedRoomCode = normalizeRoomCodeForLog(request.roomCode);
+      logInfo("join room event", {
+        socketId: socket.id,
+        roomCodeReceived: receivedRoomCode,
+        normalizedRoomCode,
+        playerName: typeof request.name === "string" ? request.name.trim() : undefined,
+        gender: typeof request.gender === "string" ? request.gender : undefined,
+        ...payloadSummary(payload)
+      });
       if (!rateLimit.allow(socket.id, "joinRoom", 10, 10_000)) throw new Error("Too many join requests.");
       const code = readRoomCode(request.roomCode);
       const name = readName(request.name);
       const gender = request.gender;
       if (!isGender(gender)) throw new Error("Gender is required.");
+      const existingRoomCodes = rooms.roomCodes();
+      logInfo("join room lookup starting", { socketId: socket.id, normalizedRoomCode: code, existingRoomCodes });
       const room = rooms.getByCode(code);
+      logInfo("join room lookup result", {
+        socketId: socket.id,
+        normalizedRoomCode: code,
+        roomExists: Boolean(room),
+        roomId: room?.id,
+        roomPhase: room?.phase,
+        playerCount: room?.players.size
+      });
       if (!room) {
         logWarn("room not found", { socketId: socket.id, roomCode: code });
-        throw new Error("Room not found.");
+        throw new Error("Room not found");
       }
+      if (room.phase !== "lobby") throw new Error("Room already started");
+      if (room.players.size >= GAME.maxPlayers) throw new Error("Room full");
       const player = room.addPlayer(name, gender, socket.id);
       joinSocketRoom(socket, room, player.id);
       logInfo("room joined", { socketId: socket.id, roomId: room.id, roomCode: room.code, playerId: player.id, players: room.players.size });

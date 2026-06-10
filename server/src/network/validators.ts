@@ -12,9 +12,9 @@ export function readName(value: unknown): string {
 }
 
 export function readRoomCode(value: unknown): string {
-  if (typeof value !== "string") throw new Error("Room code is required.");
+  if (typeof value !== "string") throw new Error("Invalid room code");
   const code = value.trim().toUpperCase();
-  if (!/^[A-Z2-9]{5}$/.test(code)) throw new Error("Invalid room code.");
+  if (!code) throw new Error("Invalid room code");
   return code;
 }
 

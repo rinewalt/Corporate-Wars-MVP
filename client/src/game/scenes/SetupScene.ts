@@ -200,13 +200,14 @@ export class SetupScene extends Phaser.Scene {
     socket.on("reconnected", (payload: RoomEntryPayload) => {
       enterLobby("reconnect", payload);
     });
-    socket.on("errorMessage", (payload: { message?: string }) => {
-      console.warn("[setup] server error response received", { message: payload.message ?? "Connection error." });
-      this.setStatus(payload.message ?? "Connection error.");
+    socket.on("errorMessage", (payload: { code?: string; message?: string }) => {
+      console.warn("[setup] server error response received", payload);
+      this.setStatus(payload.message ?? "Connection error.", true);
     });
   }
 
-  private setStatus(text: string): void {
+  private setStatus(text: string, isError = false): void {
+    this.status?.setColor(isError ? "#ff7d7d" : "#ffdf75");
     this.status?.setText(text);
   }
 }
