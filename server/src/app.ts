@@ -1,5 +1,5 @@
 import cors from "cors";
-import express from "express";
+import express, { type Request, type Response } from "express";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { attachSocketHandlers } from "./socket.js";
@@ -9,7 +9,7 @@ export function createApp() {
   const app = express();
   const clientOrigin = process.env.CLIENT_ORIGIN ?? "*";
   app.use(cors({ origin: clientOrigin }));
-  app.get("/health", (_request, response) => {
+  app.get("/health", (_request: Request, response: Response) => {
     response.json({ ok: true, service: "corporate-wars-server" });
   });
 
