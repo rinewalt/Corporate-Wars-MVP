@@ -16,33 +16,9 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.createProcessedMapTexture();
+    this.textures.get("master-map").setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.createAnimations();
     this.scene.start("SetupScene");
-  }
-
-  private createProcessedMapTexture(): void {
-    const source = this.textures.get("master-map").getSourceImage() as HTMLImageElement | HTMLCanvasElement;
-    const canvasTexture = this.textures.createCanvas("master-map-processed", source.width, source.height);
-    if (!canvasTexture) return;
-    const context = canvasTexture.getContext();
-    context.drawImage(source, 0, 0);
-    const imageData = context.getImageData(0, 0, source.width, source.height);
-    const data = imageData.data;
-    for (let index = 0; index < data.length; index += 4) {
-      const red = data[index] ?? 0;
-      const green = data[index + 1] ?? 0;
-      const blue = data[index + 2] ?? 0;
-      const alpha = data[index + 3] ?? 255;
-      if (alpha < 8 || (red > 238 && green > 238 && blue > 238)) {
-        data[index] = 5;
-        data[index + 1] = 14;
-        data[index + 2] = 2;
-        data[index + 3] = 255;
-      }
-    }
-    context.putImageData(imageData, 0, 0);
-    canvasTexture.refresh();
   }
 
   private createAnimations(): void {

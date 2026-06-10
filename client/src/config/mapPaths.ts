@@ -5,7 +5,15 @@ export interface Point {
 
 export interface OfficePathConfig {
   slot: number;
+  lotCenterX: number;
+  lotCenterY: number;
+  buildingOffsetX: number;
+  buildingOffsetY: number;
+  ceoOffsetX: number;
+  ceoOffsetY: number;
+  lotCenter: Point;
   officePosition: Point;
+  buildingOffset: Point;
   spawnPoint: Point;
   roadEntryPoint: Point;
   ringWaypoint: Point;
@@ -16,33 +24,44 @@ export interface OfficePathConfig {
 export const GAME_WIDTH = 1800;
 export const GAME_HEIGHT = 1400;
 export const MAP_BACKGROUND = "#050e02";
+export const SHOW_BUILDING_BOUNDS = true;
+
+const MAP_SOURCE_WIDTH = 1536;
+const MAP_SOURCE_HEIGHT = 1007;
+const MAP_SCALE = Math.min(1, GAME_WIDTH / MAP_SOURCE_WIDTH, GAME_HEIGHT / MAP_SOURCE_HEIGHT);
+const MAP_OFFSET_X = (GAME_WIDTH - MAP_SOURCE_WIDTH * MAP_SCALE) / 2;
+const MAP_OFFSET_Y = (GAME_HEIGHT - MAP_SOURCE_HEIGHT * MAP_SCALE) / 2;
 
 export const MAP_LAYOUT = {
-  sourceWidth: 1800,
-  sourceHeight: 1400,
-  scale: 1100 / 1400,
-  worldWidth: 1800 * (1100 / 1400),
-  worldHeight: 1100,
-  offsetX: (1800 - 1800 * (1100 / 1400)) / 2,
-  offsetY: 150,
-  center: { x: 900, y: 755 }
+  sourceWidth: MAP_SOURCE_WIDTH,
+  sourceHeight: MAP_SOURCE_HEIGHT,
+  mapScale: MAP_SCALE,
+  mapOffsetX: MAP_OFFSET_X,
+  mapOffsetY: MAP_OFFSET_Y,
+  worldWidth: MAP_SOURCE_WIDTH * MAP_SCALE,
+  worldHeight: MAP_SOURCE_HEIGHT * MAP_SCALE,
+  center: { x: MAP_OFFSET_X + 768 * MAP_SCALE, y: MAP_OFFSET_Y + 503 * MAP_SCALE },
+  buildingOffsetX: 0,
+  buildingOffsetY: 0,
+  ceoOffsetX: 0,
+  ceoOffsetY: -48
 } as const;
 
-const sourceOffices: Point[] = [
-  { x: 500, y: 290 },
-  { x: 900, y: 290 },
-  { x: 1280, y: 290 },
-  { x: 295, y: 435 },
-  { x: 1510, y: 435 },
-  { x: 260, y: 650 },
-  { x: 1540, y: 650 },
-  { x: 270, y: 905 },
-  { x: 1535, y: 905 },
-  { x: 285, y: 1160 },
-  { x: 620, y: 1215 },
-  { x: 900, y: 1215 },
-  { x: 1230, y: 1215 },
-  { x: 1520, y: 1160 }
+const sourceOfficePlacements = [
+  { lotCenterX: 384, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 768, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 1152, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 156, lotCenterY: 209, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 1380, lotCenterY: 209, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 76, lotCenterY: 397, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 1460, lotCenterY: 397, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 76, lotCenterY: 610, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 1460, lotCenterY: 610, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 126, lotCenterY: 842, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 446, lotCenterY: 912, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 768, lotCenterY: 938, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 1090, lotCenterY: 912, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
+  { lotCenterX: 1410, lotCenterY: 842, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 }
 ];
 
 export const PLAYER_COLORS = [
@@ -62,16 +81,24 @@ export const PLAYER_COLORS = [
   0xf6bd35
 ] as const;
 
-export const OFFICE_PATHS: OfficePathConfig[] = sourceOffices.map((point, index) => {
-  const officePosition = toWorld(point);
-  const ringWaypoint = radialPoint(point, 430, 330);
+export const OFFICE_PATHS: OfficePathConfig[] = sourceOfficePlacements.map((placement, index) => {
+  const point = { x: placement.lotCenterX, y: placement.lotCenterY };
+  const lotCenter = toWorld(point);
+  const officePosition = {
+    x: lotCenter.x + placement.buildingOffsetX,
+    y: lotCenter.y + placement.buildingOffsetY
+  };
+  const ringWaypoint = radialPoint(point, 382, 274);
   return {
     slot: index,
+    ...placement,
+    lotCenter,
     officePosition,
-    spawnPoint: offsetToward(officePosition, ringWaypoint, 34),
-    roadEntryPoint: offsetToward(officePosition, ringWaypoint, 94),
+    buildingOffset: { x: placement.buildingOffsetX, y: placement.buildingOffsetY },
+    spawnPoint: offsetToward(officePosition, ringWaypoint, 46),
+    roadEntryPoint: offsetToward(officePosition, ringWaypoint, 118),
     ringWaypoint,
-    ceoOffset: { x: 0, y: -36 },
+    ceoOffset: { x: placement.ceoOffsetX, y: placement.ceoOffsetY },
     color: PLAYER_COLORS[index] ?? 0xffffff
   };
 });
@@ -105,13 +132,13 @@ export function routeDistance(points: Point[]): number {
 
 function toWorld(point: Point): Point {
   return {
-    x: MAP_LAYOUT.offsetX + point.x * MAP_LAYOUT.scale,
-    y: MAP_LAYOUT.offsetY + point.y * MAP_LAYOUT.scale
+    x: MAP_OFFSET_X + point.x * MAP_SCALE,
+    y: MAP_OFFSET_Y + point.y * MAP_SCALE
   };
 }
 
 function radialPoint(point: Point, radiusX: number, radiusY: number): Point {
-  const centerSource = { x: 900, y: 770 };
+  const centerSource = { x: 768, y: 503 };
   const dx = point.x - centerSource.x;
   const dy = point.y - centerSource.y;
   const length = Math.hypot(dx, dy) || 1;

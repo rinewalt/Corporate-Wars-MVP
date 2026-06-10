@@ -363,13 +363,13 @@ export class RoomState {
     const fromRing = ringWaypoint(from);
     const toRing = ringWaypoint(to);
     return [
-      offsetToward(from, fromRing, 34),
-      offsetToward(from, fromRing, 94),
+      offsetToward(from, fromRing, 46),
+      offsetToward(from, fromRing, 118),
       fromRing,
-      { x: 900, y: 755 },
+      { x: 900, y: 699.5 },
       toRing,
-      offsetToward(to, toRing, 94),
-      offsetToward(to, toRing, 34)
+      offsetToward(to, toRing, 118),
+      offsetToward(to, toRing, 46)
     ];
   }
 
@@ -436,13 +436,13 @@ function routeDistance(points: Array<{ x: number; y: number }>): number {
 }
 
 function ringWaypoint(point: { x: number; y: number }): { x: number; y: number } {
-  const center = { x: 900, y: 755 };
+  const center = { x: 900, y: 699.5 };
   const dx = point.x - center.x;
   const dy = point.y - center.y;
   const length = Math.hypot(dx, dy) || 1;
   return {
-    x: center.x + (dx / length) * 338,
-    y: center.y + (dy / length) * 259
+    x: center.x + (dx / length) * 382,
+    y: center.y + (dy / length) * 274
   };
 }
 
