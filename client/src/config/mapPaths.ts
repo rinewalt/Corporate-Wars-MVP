@@ -11,6 +11,10 @@ export interface OfficePathConfig {
   buildingOffsetY: number;
   ceoOffsetX: number;
   ceoOffsetY: number;
+  uiOffsetX: number;
+  uiOffsetY: number;
+  workerSpawnOffsetX: number;
+  workerSpawnOffsetY: number;
   lotCenter: Point;
   officePosition: Point;
   buildingOffset: Point;
@@ -24,7 +28,8 @@ export interface OfficePathConfig {
 export const GAME_WIDTH = 1800;
 export const GAME_HEIGHT = 1400;
 export const MAP_BACKGROUND = "#050e02";
-export const SHOW_BUILDING_BOUNDS = true;
+export const SHOW_BUILDING_BOUNDS = false;
+export const BUILDING_ORIGIN = { x: 0.5, y: 0.62 } as const;
 
 const MAP_SOURCE_WIDTH = 1536;
 const MAP_SOURCE_HEIGHT = 1007;
@@ -44,24 +49,24 @@ export const MAP_LAYOUT = {
   buildingOffsetX: 0,
   buildingOffsetY: 0,
   ceoOffsetX: 0,
-  ceoOffsetY: -48
+  ceoOffsetY: -34
 } as const;
 
 const sourceOfficePlacements = [
-  { lotCenterX: 384, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 768, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 1152, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 156, lotCenterY: 209, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 1380, lotCenterY: 209, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 76, lotCenterY: 397, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 1460, lotCenterY: 397, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 76, lotCenterY: 610, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 1460, lotCenterY: 610, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 126, lotCenterY: 842, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 446, lotCenterY: 912, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 768, lotCenterY: 938, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 1090, lotCenterY: 912, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 },
-  { lotCenterX: 1410, lotCenterY: 842, buildingOffsetX: 0, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -48 }
+  { lotCenterX: 384, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -150, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 768, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -150, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 1152, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -150, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 156, lotCenterY: 209, buildingOffsetX: 0, buildingOffsetY: 4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 72, uiOffsetY: -126, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 1380, lotCenterY: 209, buildingOffsetX: 0, buildingOffsetY: 4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -72, uiOffsetY: -126, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 76, lotCenterY: 397, buildingOffsetX: 4, buildingOffsetY: 2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 96, uiOffsetY: -92, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 1460, lotCenterY: 397, buildingOffsetX: -4, buildingOffsetY: 2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -96, uiOffsetY: -92, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 76, lotCenterY: 610, buildingOffsetX: 4, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 100, uiOffsetY: -74, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 1460, lotCenterY: 610, buildingOffsetX: -4, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -100, uiOffsetY: -74, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 126, lotCenterY: 842, buildingOffsetX: 2, buildingOffsetY: -2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 78, uiOffsetY: -90, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 446, lotCenterY: 912, buildingOffsetX: 0, buildingOffsetY: -4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -116, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 768, lotCenterY: 938, buildingOffsetX: 0, buildingOffsetY: -8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -124, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 1090, lotCenterY: 912, buildingOffsetX: 0, buildingOffsetY: -4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -116, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
+  { lotCenterX: 1410, lotCenterY: 842, buildingOffsetX: -2, buildingOffsetY: -2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -78, uiOffsetY: -90, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 }
 ];
 
 export const PLAYER_COLORS = [
@@ -89,13 +94,17 @@ export const OFFICE_PATHS: OfficePathConfig[] = sourceOfficePlacements.map((plac
     y: lotCenter.y + placement.buildingOffsetY
   };
   const ringWaypoint = radialPoint(point, 382, 274);
+  const spawnPoint = offsetToward(officePosition, ringWaypoint, 46);
   return {
     slot: index,
     ...placement,
     lotCenter,
     officePosition,
     buildingOffset: { x: placement.buildingOffsetX, y: placement.buildingOffsetY },
-    spawnPoint: offsetToward(officePosition, ringWaypoint, 46),
+    spawnPoint: {
+      x: spawnPoint.x + placement.workerSpawnOffsetX,
+      y: spawnPoint.y + placement.workerSpawnOffsetY
+    },
     roadEntryPoint: offsetToward(officePosition, ringWaypoint, 118),
     ringWaypoint,
     ceoOffset: { x: placement.ceoOffsetX, y: placement.ceoOffsetY },

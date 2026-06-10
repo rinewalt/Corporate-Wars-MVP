@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { getSocket } from "../network/socket";
 import { clearSession } from "../network/reconnect";
-import { OFFICE_PATHS } from "../../config/mapPaths";
+import { BUILDING_ORIGIN, OFFICE_PATHS } from "../../config/mapPaths";
 import { drawCorporateCity, OFFICE_SLOTS } from "../render/MapRenderer";
 import { clientState } from "../state/ClientGameState";
 import type { EndStats, PublicAttack, PublicPlayer, RoomSnapshot } from "../types/shared";
@@ -124,14 +124,17 @@ export class GameScene extends Phaser.Scene {
     let view = this.offices.get(player.id);
     if (!view) {
       const container = this.add.container(slot.x, slot.y).setDepth(slot.y);
-      const building = this.add.image(0, 0, "player-building").setScale(0.23).setDepth(0);
+      const building = this.add.image(0, 0, "player-building")
+        .setOrigin(BUILDING_ORIGIN.x, BUILDING_ORIGIN.y)
+        .setScale(0.23)
+        .setDepth(0);
       const pathConfig = OFFICE_PATHS[player.officeSlot];
       const offset = pathConfig?.ceoOffset ?? { x: 0, y: -36 };
       const ceo = this.add.image(offset.x, offset.y, player.gender === "female" ? "ceo-female" : "ceo-male")
         .setScale(0.14)
         .setOrigin(0.5, 1)
         .setDepth(2);
-      const labelOffset = safeLabelOffset(slot);
+      const labelOffset = pathConfig ? { x: pathConfig.uiOffsetX, y: pathConfig.uiOffsetY } : safeLabelOffset(slot);
       const panel = this.add.rectangle(labelOffset.x, labelOffset.y, 156, 92, 0x162436, 0.96).setStrokeStyle(2, pathConfig?.color ?? 0xe4ecf1);
       const label = this.add.text(labelOffset.x, labelOffset.y, "", {
         fontFamily: "monospace",
