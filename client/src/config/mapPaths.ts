@@ -15,11 +15,18 @@ export interface OfficePathConfig {
   uiOffsetY: number;
   workerSpawnOffsetX: number;
   workerSpawnOffsetY: number;
+  nearestRoadNodeX: number;
+  nearestRoadNodeY: number;
+  officeAttackPointX: number;
+  officeAttackPointY: number;
   lotCenter: Point;
   officePosition: Point;
   buildingOffset: Point;
+  workerSpawnPoint: Point;
   spawnPoint: Point;
   roadEntryPoint: Point;
+  nearestRoadNode: Point;
+  officeAttackPoint: Point;
   ringWaypoint: Point;
   ceoOffset: Point;
   color: number;
@@ -29,6 +36,7 @@ export const GAME_WIDTH = 1800;
 export const GAME_HEIGHT = 1400;
 export const MAP_BACKGROUND = "#050e02";
 export const SHOW_BUILDING_BOUNDS = false;
+export const SHOW_WORKER_PATHS = false;
 export const BUILDING_ORIGIN = { x: 0.5, y: 0.62 } as const;
 
 const MAP_SOURCE_WIDTH = 1536;
@@ -53,21 +61,23 @@ export const MAP_LAYOUT = {
 } as const;
 
 const sourceOfficePlacements = [
-  { lotCenterX: 384, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -150, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 768, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -150, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 1152, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -150, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 156, lotCenterY: 209, buildingOffsetX: 0, buildingOffsetY: 4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 72, uiOffsetY: -126, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 1380, lotCenterY: 209, buildingOffsetX: 0, buildingOffsetY: 4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -72, uiOffsetY: -126, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 76, lotCenterY: 397, buildingOffsetX: 4, buildingOffsetY: 2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 96, uiOffsetY: -92, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 1460, lotCenterY: 397, buildingOffsetX: -4, buildingOffsetY: 2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -96, uiOffsetY: -92, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 76, lotCenterY: 610, buildingOffsetX: 4, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 100, uiOffsetY: -74, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 1460, lotCenterY: 610, buildingOffsetX: -4, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -100, uiOffsetY: -74, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 126, lotCenterY: 842, buildingOffsetX: 2, buildingOffsetY: -2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 78, uiOffsetY: -90, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 446, lotCenterY: 912, buildingOffsetX: 0, buildingOffsetY: -4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -116, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 768, lotCenterY: 938, buildingOffsetX: 0, buildingOffsetY: -8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -124, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 1090, lotCenterY: 912, buildingOffsetX: 0, buildingOffsetY: -4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -116, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 },
-  { lotCenterX: 1410, lotCenterY: 842, buildingOffsetX: -2, buildingOffsetY: -2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -78, uiOffsetY: -90, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0 }
+  { lotCenterX: 384, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -150, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 384, nearestRoadNodeY: 150, officeAttackPointX: 384, officeAttackPointY: 133 },
+  { lotCenterX: 768, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -150, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 768, nearestRoadNodeY: 150, officeAttackPointX: 768, officeAttackPointY: 133 },
+  { lotCenterX: 1152, lotCenterY: 73, buildingOffsetX: 0, buildingOffsetY: 8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -150, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 1152, nearestRoadNodeY: 150, officeAttackPointX: 1152, officeAttackPointY: 133 },
+  { lotCenterX: 156, lotCenterY: 209, buildingOffsetX: 0, buildingOffsetY: 4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 72, uiOffsetY: -126, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 222, nearestRoadNodeY: 252, officeAttackPointX: 204, officeAttackPointY: 236 },
+  { lotCenterX: 1380, lotCenterY: 209, buildingOffsetX: 0, buildingOffsetY: 4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -72, uiOffsetY: -126, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 1314, nearestRoadNodeY: 252, officeAttackPointX: 1332, officeAttackPointY: 236 },
+  { lotCenterX: 76, lotCenterY: 397, buildingOffsetX: 4, buildingOffsetY: 2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 96, uiOffsetY: -92, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 194, nearestRoadNodeY: 397, officeAttackPointX: 168, officeAttackPointY: 397 },
+  { lotCenterX: 1460, lotCenterY: 397, buildingOffsetX: -4, buildingOffsetY: 2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -96, uiOffsetY: -92, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 1342, nearestRoadNodeY: 397, officeAttackPointX: 1368, officeAttackPointY: 397 },
+  { lotCenterX: 76, lotCenterY: 610, buildingOffsetX: 4, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 100, uiOffsetY: -74, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 194, nearestRoadNodeY: 610, officeAttackPointX: 168, officeAttackPointY: 610 },
+  { lotCenterX: 1460, lotCenterY: 610, buildingOffsetX: -4, buildingOffsetY: 0, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -100, uiOffsetY: -74, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 1342, nearestRoadNodeY: 610, officeAttackPointX: 1368, officeAttackPointY: 610 },
+  { lotCenterX: 126, lotCenterY: 842, buildingOffsetX: 2, buildingOffsetY: -2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 78, uiOffsetY: -90, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 222, nearestRoadNodeY: 755, officeAttackPointX: 204, officeAttackPointY: 778 },
+  { lotCenterX: 446, lotCenterY: 912, buildingOffsetX: 0, buildingOffsetY: -4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -116, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 446, nearestRoadNodeY: 835, officeAttackPointX: 446, officeAttackPointY: 852 },
+  { lotCenterX: 768, lotCenterY: 938, buildingOffsetX: 0, buildingOffsetY: -8, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -124, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 768, nearestRoadNodeY: 835, officeAttackPointX: 768, officeAttackPointY: 862 },
+  { lotCenterX: 1090, lotCenterY: 912, buildingOffsetX: 0, buildingOffsetY: -4, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: 0, uiOffsetY: -116, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 1090, nearestRoadNodeY: 835, officeAttackPointX: 1090, officeAttackPointY: 852 },
+  { lotCenterX: 1410, lotCenterY: 842, buildingOffsetX: -2, buildingOffsetY: -2, ceoOffsetX: 0, ceoOffsetY: -35, uiOffsetX: -78, uiOffsetY: -90, workerSpawnOffsetX: 0, workerSpawnOffsetY: 0, nearestRoadNodeX: 1314, nearestRoadNodeY: 755, officeAttackPointX: 1332, officeAttackPointY: 778 }
 ];
+
+const roadLoopSlotOrder = [0, 1, 2, 4, 6, 8, 13, 12, 11, 10, 9, 7, 5, 3];
 
 export const PLAYER_COLORS = [
   0x3f8cff,
@@ -89,23 +99,28 @@ export const PLAYER_COLORS = [
 export const OFFICE_PATHS: OfficePathConfig[] = sourceOfficePlacements.map((placement, index) => {
   const point = { x: placement.lotCenterX, y: placement.lotCenterY };
   const lotCenter = toWorld(point);
+  const nearestRoadNode = toWorld({ x: placement.nearestRoadNodeX, y: placement.nearestRoadNodeY });
+  const officeAttackPoint = toWorld({ x: placement.officeAttackPointX, y: placement.officeAttackPointY });
   const officePosition = {
     x: lotCenter.x + placement.buildingOffsetX,
     y: lotCenter.y + placement.buildingOffsetY
   };
-  const ringWaypoint = radialPoint(point, 382, 274);
-  const spawnPoint = offsetToward(officePosition, ringWaypoint, 46);
+  const ringWaypoint = nearestRoadNode;
+  const spawnPoint = {
+    x: officeAttackPoint.x + placement.workerSpawnOffsetX,
+    y: officeAttackPoint.y + placement.workerSpawnOffsetY
+  };
   return {
     slot: index,
     ...placement,
     lotCenter,
     officePosition,
     buildingOffset: { x: placement.buildingOffsetX, y: placement.buildingOffsetY },
-    spawnPoint: {
-      x: spawnPoint.x + placement.workerSpawnOffsetX,
-      y: spawnPoint.y + placement.workerSpawnOffsetY
-    },
-    roadEntryPoint: offsetToward(officePosition, ringWaypoint, 118),
+    workerSpawnPoint: spawnPoint,
+    spawnPoint,
+    roadEntryPoint: offsetToward(spawnPoint, nearestRoadNode, 42),
+    nearestRoadNode,
+    officeAttackPoint,
     ringWaypoint,
     ceoOffset: { x: placement.ceoOffsetX, y: placement.ceoOffsetY },
     color: PLAYER_COLORS[index] ?? 0xffffff
@@ -118,14 +133,15 @@ export function routeForSlots(fromSlot: number, toSlot: number): Point[] {
   const from = OFFICE_PATHS[fromSlot];
   const to = OFFICE_PATHS[toSlot];
   if (!from || !to) return [];
+  const roadNodes = roadNodesBetween(fromSlot, toSlot);
   return [
-    from.spawnPoint,
+    from.workerSpawnPoint,
     from.roadEntryPoint,
-    from.ringWaypoint,
-    MAP_LAYOUT.center,
-    to.ringWaypoint,
+    from.nearestRoadNode,
+    ...roadNodes,
+    to.nearestRoadNode,
     to.roadEntryPoint,
-    to.spawnPoint
+    to.officeAttackPoint
   ];
 }
 
@@ -146,15 +162,29 @@ function toWorld(point: Point): Point {
   };
 }
 
-function radialPoint(point: Point, radiusX: number, radiusY: number): Point {
-  const centerSource = { x: 768, y: 503 };
-  const dx = point.x - centerSource.x;
-  const dy = point.y - centerSource.y;
-  const length = Math.hypot(dx, dy) || 1;
-  return toWorld({
-    x: centerSource.x + (dx / length) * radiusX,
-    y: centerSource.y + (dy / length) * radiusY
-  });
+function roadNodesBetween(fromSlot: number, toSlot: number): Point[] {
+  const fromIndex = roadLoopSlotOrder.indexOf(fromSlot);
+  const toIndex = roadLoopSlotOrder.indexOf(toSlot);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return [];
+  const clockwise = collectRoadNodes(fromIndex, toIndex, 1);
+  const counterClockwise = collectRoadNodes(fromIndex, toIndex, -1);
+  const fromNode = OFFICE_PATHS[fromSlot]!.nearestRoadNode;
+  const toNode = OFFICE_PATHS[toSlot]!.nearestRoadNode;
+  const clockwiseDistance = routeDistance([fromNode, ...clockwise, toNode]);
+  const counterClockwiseDistance = routeDistance([fromNode, ...counterClockwise, toNode]);
+  return clockwiseDistance <= counterClockwiseDistance ? clockwise : counterClockwise;
+}
+
+function collectRoadNodes(fromIndex: number, toIndex: number, direction: 1 | -1): Point[] {
+  const nodes: Point[] = [];
+  let index = fromIndex;
+  while (true) {
+    index = (index + direction + roadLoopSlotOrder.length) % roadLoopSlotOrder.length;
+    if (index === toIndex) break;
+    const office = OFFICE_PATHS[roadLoopSlotOrder[index]!];
+    if (office) nodes.push(office.nearestRoadNode);
+  }
+  return nodes;
 }
 
 function offsetToward(from: Point, to: Point, amount: number): Point {

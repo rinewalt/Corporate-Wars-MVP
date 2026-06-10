@@ -1,4 +1,4 @@
-import { GAME, OFFICE_SLOTS } from "../config/constants.js";
+import { GAME, OFFICE_ROUTE_POINTS, OFFICE_SLOTS } from "../config/constants.js";
 import type { EndStats, Gender, PublicAttack, PublicPlayer, RoomPhase, RoomSnapshot } from "../types/shared.js";
 import { id, token } from "../utils/ids.js";
 import { clampMin, round2 } from "../utils/safeMath.js";
@@ -357,19 +357,20 @@ export class RoomState {
   }
 
   routeForSlots(fromSlot: number, toSlot: number): Array<{ x: number; y: number }> {
-    const from = OFFICE_SLOTS[fromSlot];
-    const to = OFFICE_SLOTS[toSlot];
+    const from = OFFICE_ROUTE_POINTS[fromSlot];
+    const to = OFFICE_ROUTE_POINTS[toSlot];
     if (!from || !to) return [];
-    const fromRing = ringWaypoint(from);
-    const toRing = ringWaypoint(to);
+    const roadNodes = roadNodesBetween(fromSlot, toSlot);
+    const fromRoadEntry = offsetToward(from.officeAttackPoint, from.nearestRoadNode, 42);
+    const toRoadEntry = offsetToward(to.officeAttackPoint, to.nearestRoadNode, 42);
     return [
-      offsetToward(from, fromRing, 46),
-      offsetToward(from, fromRing, 118),
-      fromRing,
-      { x: 900, y: 699.5 },
-      toRing,
-      offsetToward(to, toRing, 118),
-      offsetToward(to, toRing, 46)
+      from.officeAttackPoint,
+      fromRoadEntry,
+      from.nearestRoadNode,
+      ...roadNodes,
+      to.nearestRoadNode,
+      toRoadEntry,
+      to.officeAttackPoint
     ];
   }
 
@@ -435,15 +436,31 @@ function routeDistance(points: Array<{ x: number; y: number }>): number {
   return distance;
 }
 
-function ringWaypoint(point: { x: number; y: number }): { x: number; y: number } {
-  const center = { x: 900, y: 699.5 };
-  const dx = point.x - center.x;
-  const dy = point.y - center.y;
-  const length = Math.hypot(dx, dy) || 1;
-  return {
-    x: center.x + (dx / length) * 382,
-    y: center.y + (dy / length) * 274
-  };
+const roadLoopSlotOrder: number[] = [0, 1, 2, 4, 6, 8, 13, 12, 11, 10, 9, 7, 5, 3];
+
+function roadNodesBetween(fromSlot: number, toSlot: number): Array<{ x: number; y: number }> {
+  const fromIndex = roadLoopSlotOrder.indexOf(fromSlot);
+  const toIndex = roadLoopSlotOrder.indexOf(toSlot);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return [];
+  const clockwise = collectRoadNodes(fromIndex, toIndex, 1);
+  const counterClockwise = collectRoadNodes(fromIndex, toIndex, -1);
+  const fromNode = OFFICE_ROUTE_POINTS[fromSlot]!.nearestRoadNode;
+  const toNode = OFFICE_ROUTE_POINTS[toSlot]!.nearestRoadNode;
+  const clockwiseDistance = routeDistance([fromNode, ...clockwise, toNode]);
+  const counterClockwiseDistance = routeDistance([fromNode, ...counterClockwise, toNode]);
+  return clockwiseDistance <= counterClockwiseDistance ? clockwise : counterClockwise;
+}
+
+function collectRoadNodes(fromIndex: number, toIndex: number, direction: 1 | -1): Array<{ x: number; y: number }> {
+  const nodes: Array<{ x: number; y: number }> = [];
+  let index = fromIndex;
+  while (true) {
+    index = (index + direction + roadLoopSlotOrder.length) % roadLoopSlotOrder.length;
+    if (index === toIndex) break;
+    const routePoint = OFFICE_ROUTE_POINTS[roadLoopSlotOrder[index]!];
+    if (routePoint) nodes.push(routePoint.nearestRoadNode);
+  }
+  return nodes;
 }
 
 function offsetToward(from: { x: number; y: number }, to: { x: number; y: number }, amount: number): { x: number; y: number } {

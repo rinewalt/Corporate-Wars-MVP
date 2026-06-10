@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { getSocket } from "../network/socket";
 import { clearSession } from "../network/reconnect";
-import { BUILDING_ORIGIN, OFFICE_PATHS } from "../../config/mapPaths";
+import { BUILDING_ORIGIN, OFFICE_PATHS, routeForSlots, SHOW_WORKER_PATHS } from "../../config/mapPaths";
 import { drawCorporateCity, OFFICE_SLOTS } from "../render/MapRenderer";
 import { clientState } from "../state/ClientGameState";
 import type { EndStats, PublicAttack, PublicPlayer, RoomSnapshot } from "../types/shared";
@@ -184,14 +184,20 @@ export class GameScene extends Phaser.Scene {
     this.activeWorkers.add(attack.id);
     const elapsed = Math.max(0, Date.now() - attack.startTime);
     const duration = Math.max(120, attack.arrivalTime - attack.startTime - elapsed);
-    const worker = this.add.sprite(fromSlot.x, fromSlot.y, "worker").setScale(0.34).setDepth(70);
+    const path = attack.waypoints.length > 0 ? attack.waypoints : routeForSlots(from.officeSlot, to.officeSlot);
+    if (path.length === 0) {
+      this.activeWorkers.delete(attack.id);
+      return;
+    }
+    const startPoint = path[0]!;
+    const worker = this.add.sprite(startPoint.x, startPoint.y, "worker").setScale(0.34).setDepth(1200);
     worker.play("worker-walk");
-    const path = attack.waypoints.length > 0 ? attack.waypoints : [fromSlot, toSlot];
-    if (path.length === 0) return worker.destroy();
+    const debugPath = SHOW_WORKER_PATHS ? this.drawAttackPathDebug(path) : undefined;
     this.followPath(worker, path, duration, () => {
       worker.play("worker-attack");
       worker.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
         this.activeWorkers.delete(attack.id);
+        debugPath?.destroy();
         worker.destroy();
       });
     });
@@ -203,19 +209,19 @@ export class GameScene extends Phaser.Scene {
     if (!player) return;
     const slot = OFFICE_SLOTS[player.officeSlot];
     if (!slot) return;
-    const targetEntry = OFFICE_PATHS[player.officeSlot]?.roadEntryPoint ?? slot;
-    const monster = this.add.sprite(targetEntry.x - 170, targetEntry.y - 95, "monster-client").setScale(0.52).setDepth(90);
+    const pathConfig = OFFICE_PATHS[player.officeSlot];
+    const targetEntry = pathConfig?.roadEntryPoint ?? slot;
+    const targetPoint = pathConfig?.officeAttackPoint ?? slot;
+    const monsterStart = { x: targetEntry.x - 170, y: targetEntry.y - 95 };
+    const monsterPath = [monsterStart, targetEntry, targetPoint];
+    const monster = this.add.sprite(monsterStart.x, monsterStart.y, "monster-client").setScale(0.52).setDepth(1300);
     monster.play("monster-client-walk");
-    this.tweens.add({
-      targets: monster,
-      x: slot.x,
-      y: slot.y,
-      duration: 2600,
-      hold: 250,
-      onComplete: () => {
+    this.followPath(monster, monsterPath, 2600, () => {
+      monster.setDepth(1400);
+      this.time.delayedCall(250, () => {
         monster.play("monster-client-attack");
         monster.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => monster.destroy());
-      }
+      });
     });
   }
 
@@ -332,10 +338,25 @@ export class GameScene extends Phaser.Scene {
         y: segment.to.y,
         duration: Math.max(80, totalDuration * (segment.distance / totalDistance)),
         ease: "Linear",
+        onStart: () => target.setFlipX(segment.to.x < segment.from.x),
         onComplete: () => run(index + 1)
       });
     };
     run(0);
+  }
+
+  private drawAttackPathDebug(path: Array<{ x: number; y: number }>): Phaser.GameObjects.Graphics {
+    const graphics = this.add.graphics().setDepth(1500);
+    graphics.lineStyle(4, 0xfff44d, 0.78);
+    graphics.beginPath();
+    graphics.moveTo(path[0]!.x, path[0]!.y);
+    for (const point of path.slice(1)) graphics.lineTo(point.x, point.y);
+    graphics.strokePath();
+    for (const point of path) {
+      graphics.fillStyle(0x4dd7ff, 0.95);
+      graphics.fillCircle(point.x, point.y, 4);
+    }
+    return graphics;
   }
 }
 
