@@ -1,0 +1,308 @@
+import Phaser from "phaser";
+import { getSocket } from "../network/socket";
+import { OFFICE_PATHS } from "../../config/mapPaths";
+import { drawCorporateCity, OFFICE_SLOTS } from "../render/MapRenderer";
+import { clientState } from "../state/ClientGameState";
+import type { EndStats, PublicAttack, PublicPlayer, RoomSnapshot } from "../types/shared";
+
+interface OfficeView {
+  container: Phaser.GameObjects.Container;
+  label: Phaser.GameObjects.Text;
+  building: Phaser.GameObjects.Image;
+  hitArea: Phaser.GameObjects.Rectangle;
+  ceo: Phaser.GameObjects.Image;
+  panel: Phaser.GameObjects.Rectangle;
+  popup?: Phaser.GameObjects.Text;
+}
+
+type AnnouncementType = "warning" | "info" | "success" | "danger";
+
+export class GameScene extends Phaser.Scene {
+  private offices = new Map<string, OfficeView>();
+  private activeWorkers = new Set<string>();
+  private announcementLayer: Phaser.GameObjects.Container | undefined;
+  private currentAnnouncement: Phaser.GameObjects.Container | undefined;
+  private active = false;
+
+  constructor() {
+    super("GameScene");
+  }
+
+  create(): void {
+    this.active = true;
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.active = false;
+      const socket = getSocket();
+      for (const event of ["gameStateSnapshot", "attackAccepted", "workerArrived", "monsterWarning", "monsterAttack", "monsterImpact", "gameEnded", "errorMessage"]) {
+        socket.removeAllListeners(event);
+      }
+    });
+    drawCorporateCity(this);
+    this.cameras.main.setBounds(0, 0, 1800, 1400);
+    this.announcementLayer = this.add.container(0, 0).setDepth(99999).setScrollFactor(0);
+    this.registerSocketHandlers();
+    this.renderSnapshot(clientState.room);
+  }
+
+  private registerSocketHandlers(): void {
+    const socket = getSocket();
+    for (const event of ["gameStateSnapshot", "attackAccepted", "workerArrived", "monsterWarning", "monsterAttack", "monsterImpact", "gameEnded", "errorMessage"]) {
+      socket.removeAllListeners(event);
+    }
+    socket.on("gameStateSnapshot", (snapshot: RoomSnapshot) => this.renderSnapshot(snapshot));
+    socket.on("attackAccepted", (attack: PublicAttack) => this.animateAttack(attack));
+    socket.on("monsterWarning", ({ playerId }) => {
+      this.showAnnouncement("⚠ ANGRY CLIENT INCOMING! ⚠", 3000, "warning");
+    });
+    socket.on("monsterAttack", ({ playerId }) => this.animateMonster(playerId));
+    socket.on("monsterImpact", ({ playerId }) => this.showOfficePopup(playerId, "-20 HP", 0xff7d7d));
+    socket.on("gameEnded", (stats: EndStats) => {
+      clientState.endStats = stats;
+      this.scene.start("EndScene");
+    });
+    socket.on("errorMessage", (payload) => this.showAnnouncement(payload.message ?? "Action failed.", 3000, "danger"));
+  }
+
+  private renderSnapshot(snapshot?: RoomSnapshot): void {
+    if (!this.active || !snapshot) return;
+    clientState.room = snapshot;
+    for (const player of snapshot.players) this.renderOffice(player);
+  }
+
+  private renderOffice(player: PublicPlayer): void {
+    const slot = OFFICE_SLOTS[player.officeSlot];
+    if (!slot) return;
+    let view = this.offices.get(player.id);
+    if (!view) {
+      const container = this.add.container(slot.x, slot.y).setDepth(slot.y);
+      const building = this.add.image(0, 0, "player-building").setScale(0.23).setDepth(0);
+      const pathConfig = OFFICE_PATHS[player.officeSlot];
+      const offset = pathConfig?.ceoOffset ?? { x: 0, y: -36 };
+      const ceo = this.add.image(offset.x, offset.y, player.gender === "female" ? "ceo-female" : "ceo-male")
+        .setScale(0.14)
+        .setOrigin(0.5, 1)
+        .setDepth(2);
+      const labelOffset = safeLabelOffset(slot);
+      const panel = this.add.rectangle(labelOffset.x, labelOffset.y, 156, 92, 0x162436, 0.96).setStrokeStyle(2, pathConfig?.color ?? 0xe4ecf1);
+      const label = this.add.text(labelOffset.x, labelOffset.y, "", {
+        fontFamily: "monospace",
+        fontSize: "16px",
+        color: "#ffffff",
+        align: "center",
+        fontStyle: "bold"
+      }).setOrigin(0.5);
+      const hitArea = this.add.rectangle(0, 0, 112, 104, 0x3de7ff, 0.001);
+      container.add([building, ceo, hitArea, panel, label]);
+      hitArea.setInteractive({ useHandCursor: true });
+      hitArea.on("pointerdown", () => this.attack(player.id));
+      view = { container, label, building, hitArea, ceo, panel };
+      this.offices.set(player.id, view);
+    }
+    const pathConfig = OFFICE_PATHS[player.officeSlot];
+    const tint = pathConfig?.color ?? 0xffffff;
+    view.label.setText(`${player.name}\n\n👥 ${player.workers}\n❤️ ${Math.ceil(player.officeHp)}`);
+    view.label.setColor(colorToCss(tint));
+    view.panel.setStrokeStyle(2, tint);
+    view.building.setTexture(player.eliminated ? "destroyed-player-building" : "player-building");
+    view.building.setTint(player.eliminated ? 0x777777 : tint);
+    view.hitArea.setAlpha(player.eliminated ? 0.02 : 0.001);
+    view.ceo.setVisible(!player.eliminated);
+    view.ceo.setTexture(player.gender === "female" ? "ceo-female" : "ceo-male");
+    view.container.setAlpha(player.connected ? 1 : 0.72);
+  }
+
+  private attack(targetPlayerId: string): void {
+    const room = clientState.room;
+    const me = room?.players.find((player) => player.id === clientState.playerId);
+    const target = room?.players.find((player) => player.id === targetPlayerId);
+    if (!me || !target || me.eliminated || target.eliminated || me.id === target.id) return;
+    getSocket().emit("attackOffice", { targetPlayerId });
+  }
+
+  private animateAttack(attack: PublicAttack): void {
+    if (!this.active) return;
+    if (this.activeWorkers.has(attack.id)) return;
+    const room = clientState.room;
+    const from = room?.players.find((player) => player.id === attack.fromPlayerId);
+    const to = room?.players.find((player) => player.id === attack.toPlayerId);
+    if (!from || !to) return;
+    const fromSlot = OFFICE_SLOTS[from.officeSlot];
+    const toSlot = OFFICE_SLOTS[to.officeSlot];
+    if (!fromSlot || !toSlot) return;
+    this.activeWorkers.add(attack.id);
+    const elapsed = Math.max(0, Date.now() - attack.startTime);
+    const duration = Math.max(120, attack.arrivalTime - attack.startTime - elapsed);
+    const worker = this.add.sprite(fromSlot.x, fromSlot.y, "worker").setScale(0.34).setDepth(70);
+    worker.play("worker-walk");
+    const path = attack.waypoints.length > 0 ? attack.waypoints : [fromSlot, toSlot];
+    if (path.length === 0) return worker.destroy();
+    this.followPath(worker, path, duration, () => {
+      worker.play("worker-attack");
+      worker.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+        this.activeWorkers.delete(attack.id);
+        worker.destroy();
+      });
+    });
+  }
+
+  private animateMonster(playerId: string): void {
+    if (!this.active) return;
+    const player = clientState.room?.players.find((candidate) => candidate.id === playerId);
+    if (!player) return;
+    const slot = OFFICE_SLOTS[player.officeSlot];
+    if (!slot) return;
+    const targetEntry = OFFICE_PATHS[player.officeSlot]?.roadEntryPoint ?? slot;
+    const monster = this.add.sprite(targetEntry.x - 170, targetEntry.y - 95, "monster-client").setScale(0.52).setDepth(90);
+    monster.play("monster-client-walk");
+    this.tweens.add({
+      targets: monster,
+      x: slot.x,
+      y: slot.y,
+      duration: 2600,
+      hold: 250,
+      onComplete: () => {
+        monster.play("monster-client-attack");
+        monster.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => monster.destroy());
+      }
+    });
+  }
+
+  private showAnnouncement(text: string, duration = 3000, type: AnnouncementType = "info"): void {
+    if (!this.active) return;
+    const color = announcementColor(type);
+    const layer = this.announcementLayer ?? this.add.container(0, 0).setDepth(99999).setScrollFactor(0);
+    this.announcementLayer = layer;
+
+    if (this.currentAnnouncement) {
+      this.tweens.killTweensOf(this.currentAnnouncement);
+      this.currentAnnouncement.destroy();
+      this.currentAnnouncement = undefined;
+    }
+
+    const message = this.add.text(900, 92, text, {
+      fontFamily: "monospace",
+      fontSize: "38px",
+      color,
+      fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 8,
+      shadow: {
+        offsetX: 4,
+        offsetY: 4,
+        color: "#000000",
+        blur: 0,
+        fill: true
+      }
+    }).setOrigin(0.5).setDepth(1);
+
+    const width = Math.max(620, message.width + 72);
+    const panel = this.add.rectangle(900, 92, width, 82, 0x000000, 0.75)
+      .setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(color).color, 0.95)
+      .setDepth(0);
+
+    const announcement = this.add.container(0, 0, [panel, message])
+      .setDepth(99999)
+      .setScrollFactor(0)
+      .setAlpha(0)
+      .setScale(0.94);
+    layer.add(announcement);
+    this.currentAnnouncement = announcement;
+
+    this.tweens.add({
+      targets: announcement,
+      alpha: 1,
+      scale: 1.04,
+      duration: 180,
+      ease: "Sine.easeOut",
+      onComplete: () => {
+        this.tweens.add({
+          targets: announcement,
+          scale: 1,
+          duration: 120,
+          ease: "Sine.easeOut"
+        });
+      }
+    });
+    this.time.delayedCall(duration, () => {
+      if (this.currentAnnouncement !== announcement || !announcement.active) return;
+      this.tweens.add({
+        targets: announcement,
+        alpha: 0,
+        y: announcement.y - 16,
+        duration: 320,
+        ease: "Sine.easeIn",
+        onComplete: () => {
+          if (this.currentAnnouncement === announcement) this.currentAnnouncement = undefined;
+          announcement.destroy();
+        }
+      });
+    });
+  }
+
+  private showOfficePopup(playerId: string, text: string, color: number): void {
+    if (!this.active) return;
+    const player = clientState.room?.players.find((candidate) => candidate.id === playerId);
+    if (!player) return;
+    const slot = OFFICE_SLOTS[player.officeSlot];
+    if (!slot) return;
+    const popupY = Math.max(46, slot.y - 150);
+    const popup = this.add.text(Phaser.Math.Clamp(slot.x, 120, 1680), popupY, text, {
+      fontFamily: "monospace",
+      fontSize: "20px",
+      color: Phaser.Display.Color.ValueToColor(color).rgba,
+      backgroundColor: "#102634",
+      padding: { x: 10, y: 6 },
+      fontStyle: "bold"
+    }).setOrigin(0.5).setDepth(80);
+    this.tweens.add({
+      targets: popup,
+      y: popup.y - 24,
+      alpha: 0,
+      duration: 2400,
+      ease: "Sine.easeOut",
+      onComplete: () => popup.destroy()
+    });
+  }
+
+  private followPath(target: Phaser.GameObjects.Sprite, path: Array<{ x: number; y: number }>, totalDuration: number, done: () => void): void {
+    const segments = path.slice(1).map((point, index) => ({
+      from: path[index]!,
+      to: point,
+      distance: Phaser.Math.Distance.Between(path[index]!.x, path[index]!.y, point.x, point.y)
+    }));
+    const totalDistance = segments.reduce((sum, segment) => sum + segment.distance, 0) || 1;
+    const run = (index: number) => {
+      const segment = segments[index];
+      if (!segment) return done();
+      this.tweens.add({
+        targets: target,
+        x: segment.to.x,
+        y: segment.to.y,
+        duration: Math.max(80, totalDuration * (segment.distance / totalDistance)),
+        ease: "Linear",
+        onComplete: () => run(index + 1)
+      });
+    };
+    run(0);
+  }
+}
+
+function safeLabelOffset(slot: { x: number; y: number }): { x: number; y: number } {
+  let x = 0;
+  let y = -118;
+  if (slot.y + y < 52) y = 108;
+  if (slot.x < 300) x = 62;
+  if (slot.x > 1500) x = -62;
+  return { x, y };
+}
+
+function colorToCss(color: number): string {
+  return `#${color.toString(16).padStart(6, "0")}`;
+}
+
+function announcementColor(type: AnnouncementType): string {
+  if (type === "warning") return "#ffcf3d";
+  if (type === "danger") return "#ff4d4d";
+  if (type === "success") return "#5dff8a";
+  return "#d8f4ff";
+}

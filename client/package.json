@@ -1,0 +1,22 @@
+{
+  "name": "@corporate-wars/client",
+  "private": true,
+  "version": "0.1.0",
+  "author": "RineDC",
+  "copyright": "© 2026 RineDC. All rights reserved.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1",
+    "socket.io-client": "^4.7.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "typescript": "^5.4.5",
+    "vite": "^8.0.16"
+  }
+}
