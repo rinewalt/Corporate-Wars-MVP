@@ -10,6 +10,30 @@ interface SocketData {
   roomId?: string;
 }
 
+function logInfo(message: string, details: Record<string, unknown> = {}): void {
+  console.info(`[socket] ${message}`, details);
+}
+
+function logWarn(message: string, details: Record<string, unknown> = {}): void {
+  console.warn(`[socket] ${message}`, details);
+}
+
+function payloadSummary(payload: unknown): Record<string, unknown> {
+  if (!payload || typeof payload !== "object") return { payloadType: typeof payload };
+  const data = payload as Record<string, unknown>;
+  return {
+    hasName: typeof data.name === "string" && data.name.trim().length > 0,
+    nameLength: typeof data.name === "string" ? data.name.trim().length : undefined,
+    gender: typeof data.gender === "string" ? data.gender : undefined,
+    roomCode: typeof data.roomCode === "string" ? data.roomCode.trim().toUpperCase() : undefined,
+    hasReady: typeof data.ready === "boolean"
+  };
+}
+
+function payloadRecord(payload: unknown): Record<string, unknown> {
+  return payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+}
+
 export function attachSocketHandlers(io: Server, rooms: RoomManager): void {
   const rateLimit = new SocketRateLimit();
   const loops = new Map<string, NodeJS.Timeout>();
@@ -52,43 +76,69 @@ export function attachSocketHandlers(io: Server, rooms: RoomManager): void {
     socket.join(room.id);
   };
 
-  const safe = (socket: Socket, fn: () => void) => {
+  const safe = (socket: Socket, eventName: string, fn: () => void) => {
     try {
       fn();
     } catch (error) {
-      socket.emit("errorMessage", { code: "bad_request", message: error instanceof Error ? error.message : "Unknown error." });
+      const message = error instanceof Error ? error.message : "Unknown error.";
+      logWarn("validation failure", {
+        eventName,
+        socketId: socket.id,
+        roomId: (socket.data as SocketData).roomId,
+        playerId: (socket.data as SocketData).playerId,
+        message
+      });
+      socket.emit("errorMessage", { code: "bad_request", message });
     }
   };
 
   io.on("connection", (socket) => {
-    socket.on("createRoom", (payload) => safe(socket, () => {
+    logInfo("socket connection", {
+      socketId: socket.id,
+      origin: socket.handshake.headers.origin,
+      transport: socket.conn.transport.name
+    });
+
+    socket.on("createRoom", (payload: unknown) => safe(socket, "createRoom", () => {
+      const request = payloadRecord(payload);
+      logInfo("create room event", { socketId: socket.id, ...payloadSummary(payload) });
       if (!rateLimit.allow(socket.id, "createRoom", 5, 10_000)) throw new Error("Too many room requests.");
-      const name = readName(payload?.name);
-      if (!isGender(payload?.gender)) throw new Error("Gender is required.");
+      const name = readName(request.name);
+      const gender = request.gender;
+      if (!isGender(gender)) throw new Error("Gender is required.");
       const room = rooms.createRoom();
-      const player = room.addPlayer(name, payload.gender, socket.id);
+      const player = room.addPlayer(name, gender, socket.id);
       joinSocketRoom(socket, room, player.id);
+      logInfo("room created", { socketId: socket.id, roomId: room.id, roomCode: room.code, playerId: player.id });
       socket.emit("roomCreated", { roomId: room.id, roomCode: room.code, playerId: player.id, reconnectToken: player.reconnectToken, roomState: room.snapshot() });
       io.to(room.id).emit("roomState", room.snapshot());
     }));
 
-    socket.on("joinRoom", (payload) => safe(socket, () => {
+    socket.on("joinRoom", (payload: unknown) => safe(socket, "joinRoom", () => {
+      const request = payloadRecord(payload);
+      logInfo("join room event", { socketId: socket.id, ...payloadSummary(payload) });
       if (!rateLimit.allow(socket.id, "joinRoom", 10, 10_000)) throw new Error("Too many join requests.");
-      const code = readRoomCode(payload?.roomCode);
-      const name = readName(payload?.name);
-      if (!isGender(payload?.gender)) throw new Error("Gender is required.");
+      const code = readRoomCode(request.roomCode);
+      const name = readName(request.name);
+      const gender = request.gender;
+      if (!isGender(gender)) throw new Error("Gender is required.");
       const room = rooms.getByCode(code);
-      if (!room) throw new Error("Room not found.");
-      const player = room.addPlayer(name, payload.gender, socket.id);
+      if (!room) {
+        logWarn("room not found", { socketId: socket.id, roomCode: code });
+        throw new Error("Room not found.");
+      }
+      const player = room.addPlayer(name, gender, socket.id);
       joinSocketRoom(socket, room, player.id);
+      logInfo("room joined", { socketId: socket.id, roomId: room.id, roomCode: room.code, playerId: player.id, players: room.players.size });
       socket.emit("roomJoined", { roomId: room.id, roomCode: room.code, playerId: player.id, reconnectToken: player.reconnectToken, roomState: room.snapshot() });
       io.to(room.id).emit("roomState", room.snapshot());
     }));
 
-    socket.on("reconnectPlayer", (payload) => safe(socket, () => {
-      const roomId = readString(payload?.roomId, "Room ID");
-      const playerId = readString(payload?.playerId, "Player ID");
-      const reconnectToken = readString(payload?.reconnectToken, "Reconnect token");
+    socket.on("reconnectPlayer", (payload: unknown) => safe(socket, "reconnectPlayer", () => {
+      const request = payloadRecord(payload);
+      const roomId = readString(request.roomId, "Room ID");
+      const playerId = readString(request.playerId, "Player ID");
+      const reconnectToken = readString(request.reconnectToken, "Reconnect token");
       const room = rooms.getById(roomId);
       if (!room) throw new Error("Room no longer exists.");
       const player = room.reconnect(playerId, reconnectToken, socket.id);
@@ -98,16 +148,19 @@ export function attachSocketHandlers(io: Server, rooms: RoomManager): void {
       io.to(room.id).emit("roomState", room.snapshot());
     }));
 
-    socket.on("setReady", (payload) => safe(socket, () => {
+    socket.on("setReady", (payload: unknown) => safe(socket, "setReady", () => {
+      const request = payloadRecord(payload);
+      logInfo("ready event", { socketId: socket.id, ...payloadSummary(payload) });
       const data = socket.data as SocketData;
       if (!data.roomId || !data.playerId) throw new Error("Not in a room.");
       const room = rooms.getById(data.roomId);
       if (!room) throw new Error("Room not found.");
-      room.setReady(data.playerId, Boolean(payload?.ready));
+      room.setReady(data.playerId, Boolean(request.ready));
       io.to(room.id).emit("roomState", room.snapshot());
     }));
 
-    socket.on("startGame", () => safe(socket, () => {
+    socket.on("startGame", () => safe(socket, "startGame", () => {
+      logInfo("start game event", { socketId: socket.id });
       const data = socket.data as SocketData;
       if (!data.roomId || !data.playerId) throw new Error("Not in a room.");
       const room = rooms.getById(data.roomId);
@@ -117,11 +170,12 @@ export function attachSocketHandlers(io: Server, rooms: RoomManager): void {
       io.to(room.id).emit("gameStarted", room.snapshot());
     }));
 
-    socket.on("attackOffice", (payload) => safe(socket, () => {
+    socket.on("attackOffice", (payload: unknown) => safe(socket, "attackOffice", () => {
+      const request = payloadRecord(payload);
       if (!rateLimit.allow(socket.id, "attackOffice", 20, 1_000)) throw new Error("Attacking too quickly.");
       const data = socket.data as SocketData;
       if (!data.roomId || !data.playerId) throw new Error("Not in a room.");
-      const targetPlayerId = readString(payload?.targetPlayerId, "Target player");
+      const targetPlayerId = readString(request.targetPlayerId, "Target player");
       const room = rooms.getById(data.roomId);
       if (!room) throw new Error("Room not found.");
       const attack = room.createAttack(data.playerId, targetPlayerId);
@@ -132,8 +186,12 @@ export function attachSocketHandlers(io: Server, rooms: RoomManager): void {
     socket.on("disconnect", () => {
       const room = rooms.findBySocket(socket.id);
       rateLimit.clearSocket(socket.id);
-      if (!room) return;
+      if (!room) {
+        logInfo("socket disconnect", { socketId: socket.id });
+        return;
+      }
       const player = room.disconnect(socket.id);
+      logInfo("socket disconnect", { socketId: socket.id, roomId: room.id, playerId: player?.id });
       if (!player) return;
       io.to(room.id).emit("playerDisconnected", { playerId: player.id });
       io.to(room.id).emit("hostChanged", { hostPlayerId: room.hostPlayerId });

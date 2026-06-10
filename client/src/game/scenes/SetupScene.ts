@@ -4,6 +4,13 @@ import { clearSession, loadSession, saveSession } from "../network/reconnect";
 import { clientState } from "../state/ClientGameState";
 import type { Gender, RoomSnapshot } from "../types/shared";
 
+interface RoomEntryPayload {
+  roomId?: string;
+  playerId: string;
+  reconnectToken: string;
+  roomState: RoomSnapshot;
+}
+
 export class SetupScene extends Phaser.Scene {
   private nameInput?: HTMLInputElement;
   private codeInput?: HTMLInputElement;
@@ -17,7 +24,9 @@ export class SetupScene extends Phaser.Scene {
 
   create(): void {
     const socket = getSocket();
-    socket.removeAllListeners();
+    for (const event of ["roomCreated", "roomJoined", "reconnected", "errorMessage"]) {
+      socket.removeAllListeners(event);
+    }
     if (new URLSearchParams(window.location.search).get("fresh") === "1") {
       clearSession();
     }
@@ -142,30 +151,59 @@ export class SetupScene extends Phaser.Scene {
   }
 
   private createRoom(): void {
+    console.info("[setup] create game clicked");
     const name = this.nameInput?.value.trim();
-    if (!name) return this.setStatus("Name required.");
-    getSocket().emit("createRoom", { name, gender: this.gender });
+    if (!name) {
+      console.warn("[setup] create game validation failed", { reason: "missing_name" });
+      return this.setStatus("Name required.");
+    }
+    const payload = { name, gender: this.gender };
+    console.info("[setup] create game event emitted", { hasName: true, nameLength: name.length, gender: this.gender });
+    getSocket().emit("createRoom", payload);
   }
 
   private joinRoom(): void {
+    console.info("[setup] join game clicked");
     const name = this.nameInput?.value.trim();
     const roomCode = this.codeInput?.value.trim().toUpperCase();
-    if (!name || !roomCode) return this.setStatus("Name and room code required.");
-    getSocket().emit("joinRoom", { name, gender: this.gender, roomCode });
+    if (!name || !roomCode) {
+      console.warn("[setup] join game validation failed", { reason: !name ? "missing_name" : "missing_room_code" });
+      return this.setStatus("Name and room code required.");
+    }
+    const payload = { name, gender: this.gender, roomCode };
+    console.info("[setup] join game event emitted", { hasName: true, nameLength: name.length, gender: this.gender, roomCode });
+    getSocket().emit("joinRoom", payload);
   }
 
   private registerSocketHandlers(): void {
     const socket = getSocket();
-    const enterLobby = (payload: { roomId: string; playerId: string; reconnectToken: string; roomState: RoomSnapshot }) => {
+    const enterLobby = (eventName: string, payload: RoomEntryPayload) => {
+      const roomId = payload.roomId ?? payload.roomState.roomId;
+      console.info(`[setup] ${eventName} server response received`, {
+        roomId,
+        roomCode: payload.roomState.roomCode,
+        playerId: payload.playerId,
+        phase: payload.roomState.phase,
+        players: payload.roomState.players.length
+      });
       clientState.setIdentity(payload.playerId, payload.reconnectToken);
       clientState.room = payload.roomState;
-      saveSession({ roomId: payload.roomId, playerId: payload.playerId, reconnectToken: payload.reconnectToken });
+      saveSession({ roomId, playerId: payload.playerId, reconnectToken: payload.reconnectToken });
       this.scene.start(payload.roomState.phase === "game" ? "GameScene" : payload.roomState.phase === "ended" ? "EndScene" : "LobbyScene");
     };
-    socket.on("roomCreated", enterLobby);
-    socket.on("roomJoined", enterLobby);
-    socket.on("reconnected", enterLobby);
-    socket.on("errorMessage", (payload) => this.setStatus(payload.message ?? "Connection error."));
+    socket.on("roomCreated", (payload: RoomEntryPayload) => {
+      enterLobby("create game", payload);
+    });
+    socket.on("roomJoined", (payload: RoomEntryPayload) => {
+      enterLobby("join game", payload);
+    });
+    socket.on("reconnected", (payload: RoomEntryPayload) => {
+      enterLobby("reconnect", payload);
+    });
+    socket.on("errorMessage", (payload: { message?: string }) => {
+      console.warn("[setup] server error response received", { message: payload.message ?? "Connection error." });
+      this.setStatus(payload.message ?? "Connection error.");
+    });
   }
 
   private setStatus(text: string): void {
