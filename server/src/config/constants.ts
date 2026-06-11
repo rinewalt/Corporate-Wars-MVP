@@ -1,4 +1,4 @@
-export const INACTIVE_ANGRY_CLIENT_DELAY_MS = 10_000;
+export const INACTIVE_ANGRY_CLIENT_DELAY_MS = 13_000;
 
 export const GAME = {
   maxPlayers: 14,
