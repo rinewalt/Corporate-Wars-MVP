@@ -23,6 +23,7 @@ export interface PlayerState {
   lastAttackAt: number;
   monsterWarningSent: boolean;
   monsterImpactAt: number | undefined;
+  eliminatedSkipLogged: boolean;
   eliminatedAt: number | undefined;
 }
 
@@ -44,6 +45,10 @@ export interface CombatResult {
   defenderKilled: boolean;
   officeDamage: number;
   officeDestroyed: boolean;
+}
+
+function logGame(message: string, details: Record<string, unknown>): void {
+  console.info(`[game] ${message}`, details);
 }
 
 export class RoomState {
@@ -89,6 +94,7 @@ export class RoomState {
       lastAttackAt: Date.now(),
       monsterWarningSent: false,
       monsterImpactAt: undefined,
+      eliminatedSkipLogged: false,
       eliminatedAt: undefined
     };
     this.players.set(player.id, player);
@@ -155,6 +161,7 @@ export class RoomState {
     this.gameStartedAt = now;
     this.lastWorkerGenerationAt = now;
     const shuffledSlots = shuffleSlots();
+    logGame("shuffled slot order", { roomId: this.id, roomCode: this.code, shuffledSlotOrder: shuffledSlots });
     let slotIndex = 0;
     for (const player of this.players.values()) {
       player.officeSlot = shuffledSlots[slotIndex] ?? player.officeSlot;
@@ -162,6 +169,20 @@ export class RoomState {
       player.lastAttackAt = now;
       player.monsterWarningSent = false;
       player.monsterImpactAt = undefined;
+      player.eliminatedSkipLogged = false;
+      logGame("player slot assigned", {
+        roomId: this.id,
+        playerId: player.id,
+        playerName: player.name,
+        assignedSlotId: player.officeSlot
+      });
+      logGame("inactivity timer started", {
+        roomId: this.id,
+        playerId: player.id,
+        playerName: player.name,
+        lastAttackAt: player.lastAttackAt,
+        delayMs: GAME.inactiveAngryClientDelayMs
+      });
     }
   }
 
@@ -189,6 +210,14 @@ export class RoomState {
     from.workersSent += 1;
     from.lastAttackAt = now;
     from.monsterWarningSent = false;
+    logGame("player attack reset timer", {
+      roomId: this.id,
+      playerId: from.id,
+      playerName: from.name,
+      targetPlayerId: to.id,
+      lastAttackAt: from.lastAttackAt,
+      delayMs: GAME.inactiveAngryClientDelayMs
+    });
 
     const waypoints = this.routeForSlots(from.officeSlot, to.officeSlot);
     const travelMs = this.travelTime(from.officeSlot, to.officeSlot);
@@ -261,7 +290,18 @@ export class RoomState {
     const attacks: string[] = [];
     const impacts: string[] = [];
     for (const player of this.players.values()) {
-      if (player.eliminated) continue;
+      if (player.eliminated) {
+        if (!player.eliminatedSkipLogged) {
+          logGame("skipped eliminated player", {
+            roomId: this.id,
+            playerId: player.id,
+            playerName: player.name
+          });
+          player.eliminatedSkipLogged = true;
+        }
+        player.monsterImpactAt = undefined;
+        continue;
+      }
       if (player.monsterImpactAt && now >= player.monsterImpactAt) {
         player.monsterImpactAt = undefined;
         player.monsterWarningSent = false;
@@ -278,6 +318,14 @@ export class RoomState {
         attacks.push(player.id);
         player.monsterImpactAt = now + 2_600;
         player.lastAttackAt = now;
+        logGame("angry client triggered", {
+          roomId: this.id,
+          playerId: player.id,
+          playerName: player.name,
+          idleFor,
+          delayMs: GAME.inactiveAngryClientDelayMs,
+          impactAt: player.monsterImpactAt
+        });
       }
     }
     return { warnings, attacks, impacts };
@@ -288,6 +336,9 @@ export class RoomState {
     target.eliminated = true;
     target.officeHp = 0;
     target.workers = 0;
+    target.monsterImpactAt = undefined;
+    target.monsterWarningSent = false;
+    target.eliminatedSkipLogged = false;
     target.eliminatedAt = now;
     this.survivalRanking.unshift(target.id);
     for (const attack of [...this.attacks.values()]) {
@@ -412,6 +463,7 @@ export function publicPlayer(player: PlayerState): PublicPlayer {
     ready: player.ready,
     connected: player.connected,
     eliminated: player.eliminated,
+    slotId: player.officeSlot,
     officeSlot: player.officeSlot,
     officeHp: player.officeHp,
     workers: player.workers,

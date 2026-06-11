@@ -26,6 +26,9 @@ test("worker generation adds one worker per five second step", () => {
 test("monster warning and damage trigger on outgoing inactivity and then reset", () => {
   const { room, players } = roomWithPlayers(2);
   const target = players[0]!;
+  const early = room.tick(10_000 + GAME.inactiveAngryClientDelayMs - 1);
+  assert.equal(early.monsterWarnings.length, 0);
+  assert.equal(early.monsterAttacks.length, 0);
   const result = room.tick(10_000 + GAME.inactiveAngryClientDelayMs);
   assert.deepEqual(result.monsterWarnings, players.map((p) => p.id));
   assert.equal(result.monsterAttacks.includes(target.id), true);
@@ -35,6 +38,19 @@ test("monster warning and damage trigger on outgoing inactivity and then reset",
   assert.equal(target.officeHp, 80);
   const second = room.tick(10_000 + GAME.inactiveAngryClientDelayMs + 2_601);
   assert.equal(second.monsterAttacks.length, 0);
+});
+
+test("successful attacks reset the inactivity timer", () => {
+  const { room, players } = roomWithPlayers(2);
+  const [attacker, target] = players;
+  attacker!.workers = 20;
+
+  room.createAttack(attacker!.id, target!.id, 19_000);
+
+  const beforeDelay = room.tick(19_000 + GAME.inactiveAngryClientDelayMs - 1);
+  assert.equal(beforeDelay.monsterAttacks.includes(attacker!.id), false);
+  const afterDelay = room.tick(19_000 + GAME.inactiveAngryClientDelayMs);
+  assert.equal(afterDelay.monsterAttacks.includes(attacker!.id), true);
 });
 
 test("simultaneous arrivals resolve deterministically with one final attacker", () => {

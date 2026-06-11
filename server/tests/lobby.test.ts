@@ -48,6 +48,32 @@ test("starting a match assigns unique randomized office slots", () => {
   }
 });
 
+test("new matches do not keep host and joiner pinned to join-order slots", () => {
+  const assignments = new Set<string>();
+  const originalRandom = Math.random;
+  let value = 0.03;
+  Math.random = () => {
+    value = (value + 0.19) % 1;
+    return value;
+  };
+  try {
+    for (let run = 0; run < 5; run += 1) {
+      const room = new RoomManager().createRoom();
+      const host = room.addPlayer("Host", "male", `socket-a-${run}`);
+      const guest = room.addPlayer("Guest", "female", `socket-b-${run}`);
+      room.setReady(host.id, true);
+      room.setReady(guest.id, true);
+      room.start(host.id, 1_000 + run);
+
+      assert.notEqual(host.officeSlot, guest.officeSlot);
+      assignments.add(`${host.officeSlot}-${guest.officeSlot}`);
+    }
+  } finally {
+    Math.random = originalRandom;
+  }
+  assert.equal(assignments.size > 1, true);
+});
+
 test("host transfer selects a connected replacement", () => {
   const room = new RoomManager().createRoom();
   const host = room.addPlayer("Host", "male", "socket-a");

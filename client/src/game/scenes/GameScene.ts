@@ -24,6 +24,7 @@ export class GameScene extends Phaser.Scene {
   private announcementLayer: Phaser.GameObjects.Container | undefined;
   private currentAnnouncement: Phaser.GameObjects.Container | undefined;
   private exitDialog: Phaser.GameObjects.Container | undefined;
+  private renderedSlots = new Map<string, number>();
   private active = false;
 
   constructor() {
@@ -32,6 +33,9 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.active = true;
+    this.offices.clear();
+    this.activeWorkers.clear();
+    this.renderedSlots.clear();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.active = false;
       const socket = getSocket();
@@ -119,8 +123,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   private renderOffice(player: PublicPlayer): void {
-    const slot = OFFICE_SLOTS[player.officeSlot];
+    const slotId = slotIdFor(player);
+    const slot = OFFICE_SLOTS[slotId];
     if (!slot) return;
+    const previousSlot = this.renderedSlots.get(player.id);
+    if (previousSlot !== slotId) {
+      console.log("[game] received player state", {
+        playerId: player.id,
+        playerName: player.name,
+        slotId
+      });
+      this.renderedSlots.set(player.id, slotId);
+    }
+    const pathConfig = OFFICE_PATHS[slotId];
     let view = this.offices.get(player.id);
     if (!view) {
       const container = this.add.container(slot.x, slot.y).setDepth(slot.y);
@@ -128,7 +143,6 @@ export class GameScene extends Phaser.Scene {
         .setOrigin(BUILDING_ORIGIN.x, BUILDING_ORIGIN.y)
         .setScale(0.23)
         .setDepth(0);
-      const pathConfig = OFFICE_PATHS[player.officeSlot];
       const offset = pathConfig?.ceoOffset ?? { x: 0, y: -36 };
       const ceo = this.add.image(offset.x, offset.y, player.gender === "female" ? "ceo-female" : "ceo-male")
         .setScale(0.14)
@@ -150,8 +164,13 @@ export class GameScene extends Phaser.Scene {
       view = { container, label, building, hitArea, ceo, panel };
       this.offices.set(player.id, view);
     }
-    const pathConfig = OFFICE_PATHS[player.officeSlot];
+    const labelOffset = pathConfig ? { x: pathConfig.uiOffsetX, y: pathConfig.uiOffsetY } : safeLabelOffset(slot);
+    const ceoOffset = pathConfig?.ceoOffset ?? { x: 0, y: -36 };
     const tint = pathConfig?.color ?? 0xffffff;
+    view.container.setPosition(slot.x, slot.y).setDepth(slot.y);
+    view.ceo.setPosition(ceoOffset.x, ceoOffset.y);
+    view.panel.setPosition(labelOffset.x, labelOffset.y);
+    view.label.setPosition(labelOffset.x, labelOffset.y);
     view.label.setText(`${player.name}\n\n👥 ${player.workers}\n❤️ ${Math.ceil(player.officeHp)}`);
     view.label.setColor(colorToCss(tint));
     view.panel.setStrokeStyle(2, tint);
@@ -178,13 +197,15 @@ export class GameScene extends Phaser.Scene {
     const from = room?.players.find((player) => player.id === attack.fromPlayerId);
     const to = room?.players.find((player) => player.id === attack.toPlayerId);
     if (!from || !to) return;
-    const fromSlot = OFFICE_SLOTS[from.officeSlot];
-    const toSlot = OFFICE_SLOTS[to.officeSlot];
+    const fromSlotId = slotIdFor(from);
+    const toSlotId = slotIdFor(to);
+    const fromSlot = OFFICE_SLOTS[fromSlotId];
+    const toSlot = OFFICE_SLOTS[toSlotId];
     if (!fromSlot || !toSlot) return;
     this.activeWorkers.add(attack.id);
     const elapsed = Math.max(0, Date.now() - attack.startTime);
     const duration = Math.max(120, attack.arrivalTime - attack.startTime - elapsed);
-    const path = attack.waypoints.length > 0 ? attack.waypoints : routeForSlots(from.officeSlot, to.officeSlot);
+    const path = attack.waypoints.length > 0 ? attack.waypoints : routeForSlots(fromSlotId, toSlotId);
     if (path.length === 0) {
       this.activeWorkers.delete(attack.id);
       return;
@@ -207,10 +228,11 @@ export class GameScene extends Phaser.Scene {
     if (!this.active) return;
     const player = clientState.room?.players.find((candidate) => candidate.id === playerId);
     if (!player) return;
-    const slot = OFFICE_SLOTS[player.officeSlot];
+    const slotId = slotIdFor(player);
+    const slot = OFFICE_SLOTS[slotId];
     if (!slot) return;
-    const pathConfig = OFFICE_PATHS[player.officeSlot];
-    const monsterPath = routeForAngryClientToSlot(player.officeSlot);
+    const pathConfig = OFFICE_PATHS[slotId];
+    const monsterPath = routeForAngryClientToSlot(slotId);
     const monsterStart = monsterPath[0] ?? ANGRY_CLIENT_SPAWN_POINT;
     const targetPoint = pathConfig?.officeAttackPoint ?? slot;
     const monster = this.add.sprite(monsterStart.x, monsterStart.y, "monster-client").setScale(0.52).setDepth(1300);
@@ -300,7 +322,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.active) return;
     const player = clientState.room?.players.find((candidate) => candidate.id === playerId);
     if (!player) return;
-    const slot = OFFICE_SLOTS[player.officeSlot];
+    const slot = OFFICE_SLOTS[slotIdFor(player)];
     if (!slot) return;
     const popupY = Math.max(46, slot.y - 150);
     const popup = this.add.text(Phaser.Math.Clamp(slot.x, 120, 1680), popupY, text, {
@@ -366,6 +388,10 @@ function safeLabelOffset(slot: { x: number; y: number }): { x: number; y: number
   if (slot.x < 300) x = 62;
   if (slot.x > 1500) x = -62;
   return { x, y };
+}
+
+function slotIdFor(player: PublicPlayer): number {
+  return Number.isInteger(player.slotId) ? player.slotId : player.officeSlot;
 }
 
 function colorToCss(color: number): string {

@@ -9,6 +9,7 @@ export interface PublicPlayer {
   ready: boolean;
   connected: boolean;
   eliminated: boolean;
+  slotId: number;
   officeSlot: number;
   officeHp: number;
   workers: number;

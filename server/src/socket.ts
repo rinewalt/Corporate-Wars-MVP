@@ -56,8 +56,14 @@ export function attachSocketHandlers(io: Server, rooms: RoomManager): void {
       }
       const result = room.tick();
       for (const combat of result.combats) io.to(room.id).emit("workerArrived", combat);
-      for (const playerId of result.monsterWarnings) io.to(room.id).emit("monsterWarning", { playerId });
-      for (const playerId of result.monsterAttacks) io.to(room.id).emit("monsterAttack", { playerId, damage: GAME.monsterDamage });
+      for (const playerId of result.monsterWarnings) {
+        logInfo("angry client warning broadcast", { roomId: room.id, playerId });
+        io.to(room.id).emit("monsterWarning", { playerId });
+      }
+      for (const playerId of result.monsterAttacks) {
+        logInfo("angry client attack broadcast", { roomId: room.id, playerId, damage: GAME.monsterDamage });
+        io.to(room.id).emit("monsterAttack", { playerId, damage: GAME.monsterDamage });
+      }
       for (const playerId of result.monsterImpacts) io.to(room.id).emit("monsterImpact", { playerId, damage: GAME.monsterDamage });
       if (result.ended) io.to(room.id).emit("gameEnded", result.ended);
       const now = Date.now();
