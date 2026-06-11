@@ -13,6 +13,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image("ceo-female", "/assets/map/female-ceo.png");
     this.load.spritesheet("worker", "/assets/map/worker.png", { frameWidth: 100, frameHeight: 147 });
     this.load.spritesheet("monster-client", "/assets/map/monster-client.png", { frameWidth: 100, frameHeight: 170 });
+    this.load.image("game-mechanics", "/assets/ui/gamemechanics.jpg");
   }
 
   create(): void {

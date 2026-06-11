@@ -8,6 +8,7 @@ export class LobbyScene extends Phaser.Scene {
   private list?: Phaser.GameObjects.Text;
   private status?: Phaser.GameObjects.Text;
   private startButton?: Phaser.GameObjects.Text;
+  private copyButton?: Phaser.GameObjects.Text;
   private active = false;
 
   constructor() {
@@ -29,6 +30,7 @@ export class LobbyScene extends Phaser.Scene {
     this.add.text(100, 95, "LOBBY", { fontFamily: "monospace", fontSize: "70px", color: "#f0c84d", fontStyle: "bold" });
     this.list = this.add.text(130, 230, "", { fontFamily: "monospace", fontSize: "30px", color: "#ffffff", lineSpacing: 14 });
     this.status = this.add.text(130, 1230, "", { fontFamily: "monospace", fontSize: "26px", color: "#ffdf75" });
+    this.copyButton = this.add.text(1180, 185, "Copy Room Code", buttonStyle()).setInteractive({ useHandCursor: true });
     const ready = this.add.text(1180, 300, "Ready / Unready", buttonStyle()).setInteractive({ useHandCursor: true });
     this.startButton = this.add.text(1180, 415, "Start Game", buttonStyle()).setInteractive({ useHandCursor: true });
     const exit = this.add.text(1180, 530, "Exit", buttonStyle()).setInteractive({ useHandCursor: true });
@@ -37,6 +39,9 @@ export class LobbyScene extends Phaser.Scene {
       fontSize: "18px",
       color: "#aac1ca"
     }).setOrigin(0.5);
+    this.copyButton.on("pointerdown", () => this.copyRoomCode());
+    this.copyButton.on("pointerover", () => this.copyButton?.setAlpha(0.86));
+    this.copyButton.on("pointerout", () => this.copyButton?.setAlpha(1));
     ready.on("pointerdown", () => {
       const me = clientState.room?.players.find((player) => player.id === clientState.playerId);
       getSocket().emit("setReady", { ready: !me?.ready });
@@ -81,6 +86,7 @@ export class LobbyScene extends Phaser.Scene {
     const allReady = room.players.every((player) => player.ready);
     const canStart = me?.isHost && room.players.length >= 2 && allReady;
     this.startButton?.setVisible(Boolean(me?.isHost));
+    this.copyButton?.setVisible(Boolean(room.roomCode));
     this.list.setText([
       `Room Code: ${room.roomCode}`,
       `Players: ${room.players.length}/14`,
@@ -89,6 +95,23 @@ export class LobbyScene extends Phaser.Scene {
       "",
       me?.isHost ? `Host controls enabled${canStart ? "" : " after everyone readies."}` : "Waiting for host."
     ]);
+  }
+
+  private async copyRoomCode(): Promise<void> {
+    const code = clientState.room?.roomCode;
+    if (!code) {
+      this.status?.setText("Copy failed. Please copy manually.").setColor("#ff7d7d");
+      return;
+    }
+    this.copyButton?.setAlpha(0.65);
+    try {
+      await copyText(code);
+      this.status?.setText("Room code copied!").setColor("#78f07d");
+    } catch {
+      this.status?.setText("Copy failed. Please copy manually.").setColor("#ff7d7d");
+    } finally {
+      this.time.delayedCall(120, () => this.copyButton?.setAlpha(1));
+    }
   }
 }
 
@@ -101,4 +124,23 @@ function buttonStyle(): Phaser.Types.GameObjects.Text.TextStyle {
     padding: { x: 18, y: 12 },
     fontStyle: "bold"
   };
+}
+
+async function copyText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Fallback copy failed");
 }

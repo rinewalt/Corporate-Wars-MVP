@@ -17,6 +17,44 @@ interface JoinPayload {
   roomCode: string;
 }
 
+interface SetupLayout {
+  panelX: number;
+  panelY: number;
+  panelWidth: number;
+  panelHeight: number;
+  titleY: number;
+  subtitleY: number;
+  labelX: number;
+  nameLabelY: number;
+  codeLabelY: number;
+  genderLabelY: number;
+  inputX: number;
+  nameInputY: number;
+  codeInputY: number;
+  maleX: number;
+  femaleX: number;
+  genderY: number;
+  createX: number;
+  joinX: number;
+  primaryY: number;
+  reconnectX: number;
+  clearX: number;
+  secondaryY: number;
+  retryX: number;
+  retryY: number;
+  statusY: number;
+  copyrightY: number;
+  debugX: number;
+  socketStatusY: number;
+  lastActionY: number;
+  errorY: number;
+  debugY: number;
+  mechanicsX: number;
+  mechanicsY: number;
+  mechanicsMaxWidth: number;
+  mechanicsMaxHeight: number;
+}
+
 export class SetupScene extends Phaser.Scene {
   private nameInput?: HTMLInputElement;
   private codeInput?: HTMLInputElement;
@@ -38,6 +76,7 @@ export class SetupScene extends Phaser.Scene {
   private pendingJoinPayload: JoinPayload | undefined = undefined;
   private joinTimeout: number | undefined = undefined;
   private connectWaitTimeout: number | undefined = undefined;
+  private layout: SetupLayout = setupLayout();
   private resizeHandler = () => this.positionInputs();
   private readonly handleSetupSocketConnect = () => {
     this.lastSocketError = "";
@@ -62,6 +101,7 @@ export class SetupScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.layout = setupLayout();
     const socket = getSocket();
     this.removeSetupSocketStatusHandlers(socket);
     for (const event of ["roomCreated", "roomJoined", "reconnected", "errorMessage"]) {
@@ -96,51 +136,55 @@ export class SetupScene extends Phaser.Scene {
   }
 
   private drawBackground(): void {
+    const layout = this.layout;
     this.add.rectangle(900, 700, 1800, 1400, 0x050e02);
-    this.add.rectangle(900, 700, 620, 660, 0x102634).setStrokeStyle(4, 0xd7e8ef);
-    this.add.text(900, 415, "Corporate Wars", {
+    this.add.rectangle(layout.panelX, layout.panelY, layout.panelWidth, layout.panelHeight, 0x102634).setStrokeStyle(4, 0xd7e8ef);
+    this.add.text(layout.panelX, layout.titleY, "Corporate Wars", {
       fontFamily: "monospace",
       fontSize: "54px",
       color: "#f0c84d",
       fontStyle: "bold"
     }).setOrigin(0.5);
-    this.add.text(900, 480, "Enter the City", {
+    this.add.text(layout.panelX, layout.subtitleY, "Enter the City", {
       fontFamily: "monospace",
       fontSize: "30px",
       color: "#ffffff",
       fontStyle: "bold"
     }).setOrigin(0.5);
-    this.add.text(650, 505, "Player name", labelStyle());
-    this.add.text(650, 600, "Room code optional", labelStyle());
-    this.add.text(650, 695, "Gender:", labelStyle());
-    this.status = this.add.text(900, 965, "", {
+    this.add.text(layout.labelX, layout.nameLabelY, "Player name", labelStyle());
+    this.add.text(layout.labelX, layout.codeLabelY, "Room code optional", labelStyle());
+    this.add.text(layout.labelX, layout.genderLabelY, "Gender:", labelStyle());
+    this.status = this.add.text(layout.panelX, layout.statusY, "", {
       fontFamily: "monospace",
       fontSize: "22px",
       color: "#ffdf75",
       align: "center"
     }).setOrigin(0.5);
-    this.socketStatus = this.add.text(600, 1035, "Socket: Connecting", debugLineStyle()).setOrigin(0, 0.5);
-    this.lastActionText = this.add.text(600, 1070, "Last action: Idle", debugLineStyle()).setOrigin(0, 0.5);
-    this.errorText = this.add.text(600, 1105, "Error: none", debugLineStyle()).setOrigin(0, 0.5);
-    this.debugText = this.add.text(600, 1150, "", {
+    this.socketStatus = this.add.text(layout.debugX, layout.socketStatusY, "Socket: Connecting", debugLineStyle()).setOrigin(0, 0.5);
+    this.lastActionText = this.add.text(layout.debugX, layout.lastActionY, "Last action: Idle", debugLineStyle()).setOrigin(0, 0.5);
+    this.errorText = this.add.text(layout.debugX, layout.errorY, "Error: none", debugLineStyle()).setOrigin(0, 0.5);
+    this.debugText = this.add.text(layout.debugX, layout.debugY, "", {
       fontFamily: "monospace",
       fontSize: "14px",
       color: "#aac1ca",
       lineSpacing: 4
     }).setOrigin(0, 0);
-    this.add.text(900, 1010, "© 2026 RineDC. All rights reserved.", {
+    this.add.text(layout.panelX, layout.copyrightY, "© 2026 RineDC. All rights reserved.", {
       fontFamily: "monospace",
       fontSize: "16px",
       color: "#aac1ca"
     }).setOrigin(0.5);
+    const mechanics = this.add.image(layout.mechanicsX, layout.mechanicsY, "game-mechanics").setOrigin(0.5);
+    mechanics.setScale(Math.min(layout.mechanicsMaxWidth / mechanics.width, layout.mechanicsMaxHeight / mechanics.height));
   }
 
   private drawForm(): void {
-    this.nameInput = this.domInput(900, 570, "Player name");
-    this.codeInput = this.domInput(900, 665, "Room code optional");
+    const layout = this.layout;
+    this.nameInput = this.domInput(layout.inputX, layout.nameInputY, "Player name");
+    this.codeInput = this.domInput(layout.inputX, layout.codeInputY, "Room code optional");
 
-    const male = this.add.text(800, 730, "Male", buttonStyle(true, "gender")).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    const female = this.add.text(1000, 730, "Female", buttonStyle(false, "gender")).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const male = this.add.text(layout.maleX, layout.genderY, "Male", buttonStyle(true, "gender")).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const female = this.add.text(layout.femaleX, layout.genderY, "Female", buttonStyle(false, "gender")).setOrigin(0.5).setInteractive({ useHandCursor: true });
     const refreshGender = () => {
       male.setStyle(buttonStyle(this.gender === "male", "gender"));
       female.setStyle(buttonStyle(this.gender === "female", "gender"));
@@ -148,15 +192,15 @@ export class SetupScene extends Phaser.Scene {
     male.on("pointerdown", () => { this.gender = "male"; refreshGender(); });
     female.on("pointerdown", () => { this.gender = "female"; refreshGender(); });
 
-    const create = this.add.text(780, 810, "Create Game", buttonStyle(true, "primary")).setOrigin(0.5);
-    const join = this.add.text(1020, 810, "Join Game", buttonStyle(true, "primary")).setOrigin(0.5);
+    const create = this.add.text(layout.createX, layout.primaryY, "Create Game", buttonStyle(true, "primary")).setOrigin(0.5);
+    const join = this.add.text(layout.joinX, layout.primaryY, "Join Game", buttonStyle(true, "primary")).setOrigin(0.5);
     this.joinButton = join;
     this.makeTouchButton(create, () => this.createRoom(), "create");
     this.makeTouchButton(join, () => this.joinRoom(), "join");
-    const reconnect = this.add.text(790, 880, "Reconnect", buttonStyle(false, "secondary")).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    this.retryButton = this.add.text(900, 925, "Retry Connection", buttonStyle(false, "secondary")).setOrigin(0.5);
+    const reconnect = this.add.text(layout.reconnectX, layout.secondaryY, "Reconnect", buttonStyle(false, "secondary")).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    this.retryButton = this.add.text(layout.retryX, layout.retryY, "Retry Connection", buttonStyle(false, "secondary")).setOrigin(0.5);
     this.makeTouchButton(this.retryButton, () => this.retryConnection(), "retry");
-    const clear = this.add.text(1010, 880, "Clear Saved", buttonStyle(false, "secondary")).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const clear = this.add.text(layout.clearX, layout.secondaryY, "Clear Saved", buttonStyle(false, "secondary")).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
     reconnect.on("pointerdown", () => {
       const stored = loadSession();
@@ -540,6 +584,86 @@ function debugLineStyle(): Phaser.Types.GameObjects.Text.TextStyle {
     fontFamily: "monospace",
     fontSize: "16px",
     color: "#aac1ca"
+  };
+}
+
+function setupLayout(): SetupLayout {
+  const isStacked = window.innerWidth <= 900 || window.innerHeight > window.innerWidth * 1.15;
+  if (isStacked) {
+    return {
+      panelX: 900,
+      panelY: 350,
+      panelWidth: 680,
+      panelHeight: 650,
+      titleY: 70,
+      subtitleY: 135,
+      labelX: 610,
+      nameLabelY: 160,
+      codeLabelY: 255,
+      genderLabelY: 350,
+      inputX: 900,
+      nameInputY: 225,
+      codeInputY: 320,
+      maleX: 800,
+      femaleX: 1000,
+      genderY: 385,
+      createX: 775,
+      joinX: 1025,
+      primaryY: 470,
+      reconnectX: 790,
+      clearX: 1010,
+      secondaryY: 545,
+      retryX: 900,
+      retryY: 590,
+      statusY: 640,
+      copyrightY: 685,
+      debugX: 560,
+      socketStatusY: 725,
+      lastActionY: 760,
+      errorY: 795,
+      debugY: 835,
+      mechanicsX: 900,
+      mechanicsY: 1145,
+      mechanicsMaxWidth: 600,
+      mechanicsMaxHeight: 480
+    };
+  }
+  return {
+    panelX: 530,
+    panelY: 700,
+    panelWidth: 620,
+    panelHeight: 660,
+    titleY: 415,
+    subtitleY: 480,
+    labelX: 280,
+    nameLabelY: 505,
+    codeLabelY: 600,
+    genderLabelY: 695,
+    inputX: 530,
+    nameInputY: 570,
+    codeInputY: 665,
+    maleX: 430,
+    femaleX: 630,
+    genderY: 730,
+    createX: 410,
+    joinX: 650,
+    primaryY: 810,
+    reconnectX: 420,
+    clearX: 640,
+    secondaryY: 880,
+    retryX: 530,
+    retryY: 925,
+    statusY: 965,
+    copyrightY: 1010,
+    debugX: 230,
+    socketStatusY: 1035,
+    lastActionY: 1070,
+    errorY: 1105,
+    debugY: 1150,
+    mechanicsX: 1260,
+    mechanicsY: 700,
+    mechanicsMaxWidth: 560,
+    mechanicsMaxHeight: 1240
   };
 }
 

@@ -35,7 +35,7 @@ test("monster warning and damage trigger on outgoing inactivity and then reset",
   assert.equal(target.officeHp, 100);
   const impact = room.tick(10_000 + GAME.inactiveAngryClientDelayMs + 2_600);
   assert.equal(impact.monsterImpacts.includes(target.id), true);
-  assert.equal(target.officeHp, 80);
+  assert.equal(target.officeHp, GAME.startingHp - GAME.monsterDamage);
   const second = room.tick(10_000 + GAME.inactiveAngryClientDelayMs + 2_601);
   assert.equal(second.monsterAttacks.length, 0);
 });
