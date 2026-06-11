@@ -1,4 +1,4 @@
-export const INACTIVE_ANGRY_CLIENT_DELAY_MS = 13_000;
+export const INACTIVE_ANGRY_CLIENT_DELAY_MS = 12_000;
 
 export const GAME = {
   maxPlayers: 14,
@@ -12,7 +12,7 @@ export const GAME = {
   closestTravelMs: 3_000,
   furthestTravelMs: 10_000,
   inactiveAngryClientDelayMs: INACTIVE_ANGRY_CLIENT_DELAY_MS,
-  monsterDamage: 20,
+  monsterDamage: 15,
   attackBonus: 0.25,
   roomCodeLength: 5,
   gameTickMs: 100,
