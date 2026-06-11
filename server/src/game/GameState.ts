@@ -154,9 +154,14 @@ export class RoomState {
     this.phase = "game";
     this.gameStartedAt = now;
     this.lastWorkerGenerationAt = now;
+    const shuffledSlots = shuffleSlots();
+    let slotIndex = 0;
     for (const player of this.players.values()) {
+      player.officeSlot = shuffledSlots[slotIndex] ?? player.officeSlot;
+      slotIndex += 1;
       player.lastAttackAt = now;
       player.monsterWarningSent = false;
+      player.monsterImpactAt = undefined;
     }
   }
 
@@ -259,6 +264,7 @@ export class RoomState {
       if (player.eliminated) continue;
       if (player.monsterImpactAt && now >= player.monsterImpactAt) {
         player.monsterImpactAt = undefined;
+        player.monsterWarningSent = false;
         player.officeHp = round2(clampMin(player.officeHp - GAME.monsterDamage));
         impacts.push(player.id);
         if (player.officeHp <= 0) this.eliminatePlayer(player, undefined, now);
@@ -266,15 +272,12 @@ export class RoomState {
       }
       if (player.monsterImpactAt) continue;
       const idleFor = now - player.lastAttackAt;
-      if (!player.monsterWarningSent && idleFor >= GAME.monsterWarningMs) {
+      if (!player.monsterWarningSent && idleFor >= GAME.inactiveAngryClientDelayMs) {
         player.monsterWarningSent = true;
         warnings.push(player.id);
-      }
-      if (idleFor >= GAME.monsterAttackMs) {
         attacks.push(player.id);
         player.monsterImpactAt = now + 2_600;
         player.lastAttackAt = now;
-        player.monsterWarningSent = false;
       }
     }
     return { warnings, attacks, impacts };
@@ -387,6 +390,17 @@ export class RoomState {
     }
     return this.players.size;
   }
+}
+
+function shuffleSlots(): number[] {
+  const slots = Array.from({ length: GAME.maxPlayers }, (_, index) => index);
+  for (let index = slots.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const current = slots[index]!;
+    slots[index] = slots[swapIndex]!;
+    slots[swapIndex] = current;
+  }
+  return slots;
 }
 
 export function publicPlayer(player: PlayerState): PublicPlayer {

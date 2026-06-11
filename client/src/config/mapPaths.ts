@@ -79,6 +79,13 @@ const sourceOfficePlacements = [
 
 const roadLoopSlotOrder = [0, 1, 2, 4, 6, 8, 13, 12, 11, 10, 9, 7, 5, 3];
 
+const angryClientRoadExits = {
+  top: toWorld({ x: 768, y: 386 }),
+  right: toWorld({ x: 936, y: 503 }),
+  bottom: toWorld({ x: 768, y: 620 }),
+  left: toWorld({ x: 600, y: 503 })
+} as const;
+
 export const PLAYER_COLORS = [
   0x3f8cff,
   0xff4d4d,
@@ -128,6 +135,7 @@ export const OFFICE_PATHS: OfficePathConfig[] = sourceOfficePlacements.map((plac
 });
 
 export const OFFICE_SLOTS = OFFICE_PATHS.map((office) => office.officePosition);
+export const ANGRY_CLIENT_SPAWN_POINT = MAP_LAYOUT.center;
 
 export function routeForSlots(fromSlot: number, toSlot: number): Point[] {
   const from = OFFICE_PATHS[fromSlot];
@@ -138,6 +146,25 @@ export function routeForSlots(fromSlot: number, toSlot: number): Point[] {
     from.workerSpawnPoint,
     from.roadEntryPoint,
     from.nearestRoadNode,
+    ...roadNodes,
+    to.nearestRoadNode,
+    to.roadEntryPoint,
+    to.officeAttackPoint
+  ];
+}
+
+export function routeForAngryClientToSlot(toSlot: number): Point[] {
+  const to = OFFICE_PATHS[toSlot];
+  if (!to) return [];
+  const roadExit = angryClientRoadExitFor(to.nearestRoadNode);
+  const anchorSlot = closestRoadSlotTo(roadExit);
+  const anchor = OFFICE_PATHS[anchorSlot];
+  if (!anchor) return [ANGRY_CLIENT_SPAWN_POINT, to.roadEntryPoint, to.officeAttackPoint];
+  const roadNodes = roadNodesBetween(anchorSlot, toSlot);
+  return [
+    ANGRY_CLIENT_SPAWN_POINT,
+    roadExit,
+    anchor.nearestRoadNode,
     ...roadNodes,
     to.nearestRoadNode,
     to.roadEntryPoint,
@@ -185,6 +212,28 @@ function collectRoadNodes(fromIndex: number, toIndex: number, direction: 1 | -1)
     if (office) nodes.push(office.nearestRoadNode);
   }
   return nodes;
+}
+
+function angryClientRoadExitFor(target: Point): Point {
+  const dx = target.x - ANGRY_CLIENT_SPAWN_POINT.x;
+  const dy = target.y - ANGRY_CLIENT_SPAWN_POINT.y;
+  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? angryClientRoadExits.right : angryClientRoadExits.left;
+  return dy > 0 ? angryClientRoadExits.bottom : angryClientRoadExits.top;
+}
+
+function closestRoadSlotTo(point: Point): number {
+  let bestSlot = roadLoopSlotOrder[0]!;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const slot of roadLoopSlotOrder) {
+    const office = OFFICE_PATHS[slot];
+    if (!office) continue;
+    const distance = Math.hypot(office.nearestRoadNode.x - point.x, office.nearestRoadNode.y - point.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestSlot = slot;
+    }
+  }
+  return bestSlot;
 }
 
 function offsetToward(from: Point, to: Point, amount: number): Point {

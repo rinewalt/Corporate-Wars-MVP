@@ -26,15 +26,14 @@ test("worker generation adds one worker per five second step", () => {
 test("monster warning and damage trigger on outgoing inactivity and then reset", () => {
   const { room, players } = roomWithPlayers(2);
   const target = players[0]!;
-  const warning = room.tick(10_000 + GAME.monsterWarningMs).monsterWarnings;
-  assert.deepEqual(warning, players.map((p) => p.id));
-  const result = room.tick(10_000 + GAME.monsterAttackMs);
+  const result = room.tick(10_000 + GAME.inactiveAngryClientDelayMs);
+  assert.deepEqual(result.monsterWarnings, players.map((p) => p.id));
   assert.equal(result.monsterAttacks.includes(target.id), true);
   assert.equal(target.officeHp, 100);
-  const impact = room.tick(10_000 + GAME.monsterAttackMs + 2_600);
+  const impact = room.tick(10_000 + GAME.inactiveAngryClientDelayMs + 2_600);
   assert.equal(impact.monsterImpacts.includes(target.id), true);
   assert.equal(target.officeHp, 80);
-  const second = room.tick(10_000 + GAME.monsterAttackMs + 2_601);
+  const second = room.tick(10_000 + GAME.inactiveAngryClientDelayMs + 2_601);
   assert.equal(second.monsterAttacks.length, 0);
 });
 

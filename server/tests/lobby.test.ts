@@ -25,6 +25,29 @@ test("ready system and host start validation work", () => {
   assert.equal(room.phase, "game");
 });
 
+test("starting a match assigns unique randomized office slots", () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const room = new RoomManager().createRoom();
+    const host = room.addPlayer("Host", "male", "socket-a");
+    const guest = room.addPlayer("Guest", "female", "socket-b");
+    const third = room.addPlayer("Third", "male", "socket-c");
+    room.setReady(host.id, true);
+    room.setReady(guest.id, true);
+    room.setReady(third.id, true);
+
+    room.start(host.id, 1_000);
+
+    const slots = [host.officeSlot, guest.officeSlot, third.officeSlot];
+    assert.equal(new Set(slots).size, slots.length);
+    assert.notDeepEqual(slots, [0, 1, 2]);
+    assert.notEqual(host.officeSlot, 0);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
 test("host transfer selects a connected replacement", () => {
   const room = new RoomManager().createRoom();
   const host = room.addPlayer("Host", "male", "socket-a");

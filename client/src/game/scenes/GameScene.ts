@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { getSocket } from "../network/socket";
 import { clearSession } from "../network/reconnect";
-import { BUILDING_ORIGIN, OFFICE_PATHS, routeForSlots, SHOW_WORKER_PATHS } from "../../config/mapPaths";
+import { ANGRY_CLIENT_SPAWN_POINT, BUILDING_ORIGIN, OFFICE_PATHS, routeForAngryClientToSlot, routeForSlots, SHOW_WORKER_PATHS } from "../../config/mapPaths";
 import { drawCorporateCity, OFFICE_SLOTS } from "../render/MapRenderer";
 import { clientState } from "../state/ClientGameState";
 import type { EndStats, PublicAttack, PublicPlayer, RoomSnapshot } from "../types/shared";
@@ -63,7 +63,7 @@ export class GameScene extends Phaser.Scene {
     socket.on("gameStateSnapshot", (snapshot: RoomSnapshot) => this.renderSnapshot(snapshot));
     socket.on("attackAccepted", (attack: PublicAttack) => this.animateAttack(attack));
     socket.on("monsterWarning", ({ playerId }) => {
-      this.showAnnouncement("⚠ ANGRY CLIENT INCOMING! ⚠", 3000, "warning");
+      this.showAnnouncement("⚠ Angry Client Incoming! ⚠", 3000, "warning");
     });
     socket.on("monsterAttack", ({ playerId }) => this.animateMonster(playerId));
     socket.on("monsterImpact", ({ playerId }) => this.showOfficePopup(playerId, "-20 HP", 0xff7d7d));
@@ -210,13 +210,12 @@ export class GameScene extends Phaser.Scene {
     const slot = OFFICE_SLOTS[player.officeSlot];
     if (!slot) return;
     const pathConfig = OFFICE_PATHS[player.officeSlot];
-    const targetEntry = pathConfig?.roadEntryPoint ?? slot;
+    const monsterPath = routeForAngryClientToSlot(player.officeSlot);
+    const monsterStart = monsterPath[0] ?? ANGRY_CLIENT_SPAWN_POINT;
     const targetPoint = pathConfig?.officeAttackPoint ?? slot;
-    const monsterStart = { x: targetEntry.x - 170, y: targetEntry.y - 95 };
-    const monsterPath = [monsterStart, targetEntry, targetPoint];
     const monster = this.add.sprite(monsterStart.x, monsterStart.y, "monster-client").setScale(0.52).setDepth(1300);
     monster.play("monster-client-walk");
-    this.followPath(monster, monsterPath, 2600, () => {
+    this.followPath(monster, monsterPath.length > 1 ? monsterPath : [monsterStart, targetPoint], 2600, () => {
       monster.setDepth(1400);
       this.time.delayedCall(250, () => {
         monster.play("monster-client-attack");
